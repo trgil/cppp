@@ -1,0 +1,4 @@
+setuptools>=42
+pytest
+flake8
+sphinx

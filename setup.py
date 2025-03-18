@@ -13,5 +13,15 @@ setup(
     install_requires=[
         'setuptools>=42',  # Specify version if needed
     ],
+    extras_require={
+        'cli': [            # For running standalone
+            'argparse',
+        ],
+        'dev': [            # For development
+            'pytest',       # For testing
+            'flake8',       # For linting
+            'sphinx',       # For documentation
+        ],
+    },
     python_requires='>=3.6',
 )
