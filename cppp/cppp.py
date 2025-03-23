@@ -83,8 +83,46 @@ class Cppp:
             Also, truncate white-space characters, since handling white-spaces is implementation-dependent.
         """
 
+        trigraph_subs = {'=': '#', '/': '\\', '\'': '^',
+                         '(': '[', ')': ']', '!': '|',
+                         '<': '{', '>': '}', '-': '~'}
+
+        qbuf = []
+        in_str = False
+
+        # Add character to temp buffer
         for char, line_num, char_num in read_input_file(self.file_name):
-            # TODO: implement
+            qbuf.append([char, (line_num, char_num)])
+
+            # TODO: add handling of strings and quotes
+
+            # Process buffer - last character
+            if qbuf[-1][0] == '\r' or qbuf[-1][0] == '\f':
+                qbuf[-1][0] = '\n'
+
+            # Process buffer - last two characters
+            if len(qbuf) > 1:
+                if qbuf[-1][0] == '\n' and qbuf[-2][0] == '\n':
+                    qbuf.pop()
+                elif qbuf[-1][0].isspace() and qbuf[-2][0].isspace():
+                    if qbuf[-1][0] == '\n':
+                        qbuf.pop(-2)
+                    else:
+                        qbuf.pop()
+
+                # Process buffer - last tree characters
+                elif len(qbuf) > 2 and self.trigraphs_enabled:
+                    if qbuf[-3][0] == '?' and qbuf[-2][0] == '?' and qbuf[-1][0] in trigraph_subs.keys():
+                        qbuf[-3][0] = trigraph_subs[qbuf[-1][0]]
+                        qbuf.pop()
+                        qbuf.pop()
 
             ### Debug Prints ###
-            print(f"Character: {char}, Line: {line_num}, Position: {char_num}")
+            while len(qbuf) > 3:
+                pchar = qbuf.pop(0)
+                print(f"{pchar[0]}", end='')
+
+        ### Debug Prints ###
+        while len(qbuf) > 0:
+            pchar = qbuf.pop(0)
+            print(f"{pchar[0]}", end='')
