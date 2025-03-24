@@ -26,6 +26,8 @@ def read_input_file(file_name):
                 for char_position, char in enumerate(line, start=1):
                     if char == '\uFFFD':  # Skip non-utf-8 characters
                         continue
+                    if char == '\r' or char == '\f':
+                        char = '\n'
                     yield char, line_num, char_position
 
     except Exception as e:
@@ -41,8 +43,8 @@ class Cppp:
         TBD
     """
 
-    predefined_values = {}
-    sys_path = []
+    _predefined_values = {}
+    _sys_path = []
 
     def __init__(self, file_name, predefined_values=None, trigraphs_enabled=False,
                  follow_included=False, sys_path=None):
@@ -65,13 +67,13 @@ class Cppp:
             if not isinstance(predefined_values, dict):
                 raise TypeError("Predefined-Macros dictionary is not in the form of a dictionary.")
             else:
-                self.predefined_values = predefined_values.copy()
+                self._predefined_values = predefined_values.copy()
 
         if sys_path:
             if not isinstance(sys_path, list):
                 raise TypeError("System path list is not in the form of a list.")
             else:
-                self.sys_path = sys_path.copy()
+                self._sys_path = sys_path.copy()
 
     def do_translation_phase_1(self):
         """
@@ -88,34 +90,30 @@ class Cppp:
                          '<': '{', '>': '}', '-': '~'}
 
         qbuf = []
-        in_str = False
+        in_string = False
+        escape_char = False
 
         # Add character to temp buffer
         for char, line_num, char_num in read_input_file(self.file_name):
-            qbuf.append([char, (line_num, char_num)])
 
             # TODO: add handling of strings and quotes
 
             # Process buffer - last character
-            if qbuf[-1][0] == '\r' or qbuf[-1][0] == '\f':
-                qbuf[-1][0] = '\n'
-
-            # Process buffer - last two characters
-            if len(qbuf) > 1:
-                if qbuf[-1][0] == '\n' and qbuf[-2][0] == '\n':
+            if char == '\n':
+                if len(qbuf) > 0 and qbuf[-1][0] == '\n':
+                    continue
+            elif char.isspace():
+                if len(qbuf) > 0 and qbuf[-1][0].isspace():
+                    continue
+                else:
+                    char = ' '
+            elif self.trigraphs_enabled and len(qbuf) > 1:
+                if qbuf[-2][0] == '?' and qbuf[-1][0] == '?' and char in trigraph_subs.keys():
                     qbuf.pop()
-                elif qbuf[-1][0].isspace() and qbuf[-2][0].isspace():
-                    if qbuf[-1][0] == '\n':
-                        qbuf.pop(-2)
-                    else:
-                        qbuf.pop()
+                    qbuf[-1][0] = trigraph_subs[char]
+                    continue
 
-                # Process buffer - last tree characters
-                elif len(qbuf) > 2 and self.trigraphs_enabled:
-                    if qbuf[-3][0] == '?' and qbuf[-2][0] == '?' and qbuf[-1][0] in trigraph_subs.keys():
-                        qbuf[-3][0] = trigraph_subs[qbuf[-1][0]]
-                        qbuf.pop()
-                        qbuf.pop()
+            qbuf.append([char, (line_num, char_num)])
 
             ### Debug Prints ###
             while len(qbuf) > 3:
