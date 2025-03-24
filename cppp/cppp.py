@@ -95,22 +95,37 @@ class Cppp:
 
         # Add character to temp buffer
         for char, line_num, char_num in read_input_file(self.file_name):
+            if in_string:
+                if char == '\\' and not escape_char:
+                    escape_char = True
+                if char == '\"' and not escape_char:
+                    in_string = False
 
-            # TODO: add handling of strings and quotes
+                escape_char = False
 
-            # Process buffer - last character
-            if char == '\n':
-                if len(qbuf) > 0 and qbuf[-1][0] == '\n':
-                    continue
-            elif char.isspace():
-                if len(qbuf) > 0 and qbuf[-1][0].isspace():
-                    continue
-                else:
-                    char = ' '
-            elif self.trigraphs_enabled and len(qbuf) > 1:
+            elif char == '\"':
+                in_string = True
+
+            else:
+                # Process buffer - last character
+                if char == '\n':
+                    if len(qbuf) > 0 and qbuf[-1][0] == '\n':
+                        continue
+                elif char.isspace():
+                    if len(qbuf) > 0 and qbuf[-1][0].isspace():
+                        continue
+                    else:
+                        char = ' '
+
+            if self.trigraphs_enabled and len(qbuf) > 1:
                 if qbuf[-2][0] == '?' and qbuf[-1][0] == '?' and char in trigraph_subs.keys():
                     qbuf.pop()
                     qbuf[-1][0] = trigraph_subs[char]
+
+                    if in_string and not escape_char:
+                        if char == '/':
+                            escape_char = True
+
                     continue
 
             qbuf.append([char, (line_num, char_num)])
