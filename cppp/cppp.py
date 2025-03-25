@@ -148,6 +148,13 @@ class Cppp:
         await out_queue.put(None)
 
     async def do_translation_phase_2(self, in_queue, out_queue = None):
+        """
+        Perform the second translation phase:
+            Each instance of a new-line character and an immediately preceding backslash character
+            is deleted. splicing physical source lines to form logical source lines.
+            - From the ISO standard document.
+            File also supposed to end with a new-line character, but this is not checked.
+        """
 
         escape_char = False
 
