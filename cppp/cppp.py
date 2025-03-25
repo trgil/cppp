@@ -147,7 +147,7 @@ class Cppp:
 
         await out_queue.put(None)
 
-    async def do_translation_phase_2(self, in_queue, out_queue = None):
+    async def do_translation_phase_2(self, in_queue, out_queue):
         """
         Perform the second translation phase:
             Each instance of a new-line character and an immediately preceding backslash character
@@ -174,7 +174,64 @@ class Cppp:
             else:
                 escape_char = False
 
-            # Debug print
+            await out_queue.put(char)
+
+        await out_queue.put(None)
+
+    async def do_translation_phase_3_remove_comments(self, in_queue, out_queue = None):
+        """
+        Perform the third translation phase - remove comments:
+            The source tile is decomposed into preprocessing tokens and sequences of
+            white-space characters (including comments). Each comment is replaced by one space character.
+            - From the ISO standard document.
+        """
+
+        in_comment_c_style = False
+        in_comment_cpp_style = False
+        char_asterisk = False
+        char_slash = None
+
+        while True:
+            char = await in_queue.get()
+            if not char:
+                break
+
+            if in_comment_c_style:
+                if char[0] == '\n':
+                    in_comment_c_style = False
+                    continue
+                else:
+                    continue
+
+            if in_comment_cpp_style:
+                if char_asterisk and char[0] == '/':
+                    in_comment_cpp_style = False
+                    continue
+                elif char[0] == '*':
+                    char_asterisk = True
+                else:
+                    char_asterisk = False
+
+            if char[0] == '/':
+                if char_slash:
+                    in_comment_c_style = True
+                    char_slash = None
+                    continue
+                else:
+                    char_slash = char
+                    continue
+
+            if char[0] == '*' and char_slash:
+                in_comment_cpp_style = True
+                char_slash = None
+
+            if char_slash:
+                ### Debug Prints ###
+                print(f"{char[0]}", end='')
+                #await out_queue.put(char_slash)
+                char_slash = None
+
+            ### Debug Prints ###
             print(f"{char[0]}", end='')
             #await out_queue.put(char)
 
@@ -182,11 +239,13 @@ class Cppp:
 
     async def do_parse_tu(self):
         queue_phase_1 = asyncio.Queue(5)
+        queue_phase_2 = asyncio.Queue(5)
 
         phase_1_task = asyncio.create_task(self.do_translation_phase_1(self.main_file_name, queue_phase_1))
-        phase_2_task = asyncio.create_task(self.do_translation_phase_2(queue_phase_1))
+        phase_2_task = asyncio.create_task(self.do_translation_phase_2(queue_phase_1, queue_phase_2))
+        phase_3_task = asyncio.create_task(self.do_translation_phase_3_remove_comments(queue_phase_2))
 
-        await asyncio.gather(phase_1_task, phase_2_task)
+        await asyncio.gather(phase_1_task, phase_2_task, phase_3_task)
 
     def parse_tu(self):
         asyncio.run(self.do_parse_tu())
