@@ -66,7 +66,7 @@ def main():
     else:
         print("No macros provided.")
 
-    TU.do_translation_phase_1()
+    TU.parse_tu()
 
 
 if __name__ == "__main__":

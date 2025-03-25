@@ -6,6 +6,8 @@ Version:    1.0.0-alpha.1
 License:    MIT License
 """
 
+import asyncio
+
 
 def read_input_file(file_name):
     """
@@ -75,7 +77,7 @@ class Cppp:
             else:
                 self._sys_path = sys_path.copy()
 
-    def do_translation_phase_1(self):
+    async def do_translation_phase_1(self, out_queue):
         """
         Perform the first translation phase:
             Physical source file characters are mapped to the source character set.
@@ -112,7 +114,7 @@ class Cppp:
                     if len(qbuf) > 0 and qbuf[-1][0] == '\n':
                         continue
                 elif char.isspace():
-                    if len(qbuf) > 0 and qbuf[-1][0].isspace():
+                    if len(qbuf) > 0 and qbuf[-1][0].isspace() and qbuf[-1][0] != '\n':
                         continue
                     else:
                         char = ' '
@@ -130,12 +132,47 @@ class Cppp:
 
             qbuf.append([char, (line_num, char_num)])
 
-            ### Debug Prints ###
             while len(qbuf) > 3:
-                pchar = qbuf.pop(0)
-                print(f"{pchar[0]}", end='')
+                await out_queue.put(qbuf.pop(0))
 
-        ### Debug Prints ###
         while len(qbuf) > 0:
-            pchar = qbuf.pop(0)
-            print(f"{pchar[0]}", end='')
+            await out_queue.put(qbuf.pop(0))
+
+        await out_queue.put(None)
+
+    async def do_translation_phase_2(self, in_queue, out_queue = None):
+
+        escape_char = False
+
+        while True:
+            char = await in_queue.get()
+            if not char:
+                break
+
+            if char[0] == '\n' and escape_char:
+                escape_char = False
+                continue
+
+            elif char[0]  == '\\' and not escape_char:
+                escape_char = True
+                continue
+
+            else:
+                escape_char = False
+
+            # Debug print
+            print(f"{char[0]}", end='')
+            #await out_queue.put(char)
+
+        #await out_queue.put(None)
+
+    async def do_parse_tu(self):
+        queue_phase_1 = asyncio.Queue(5)
+
+        phase_1_task = asyncio.create_task(self.do_translation_phase_1(queue_phase_1))
+        phase_2_task = asyncio.create_task(self.do_translation_phase_2(queue_phase_1))
+
+        await asyncio.gather(phase_1_task, phase_2_task)
+
+    def parse_tu(self):
+        asyncio.run(self.do_parse_tu())
