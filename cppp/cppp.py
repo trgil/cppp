@@ -9,34 +9,6 @@ License:    MIT License
 import asyncio
 
 
-def read_input_file(file_name):
-    """
-    Read a C/C++ source file character by character.
-
-        Parameters:
-            file_name: main source file.
-
-        Return values:
-            Tuple: Next character, Line number, Character position
-    """
-
-    try:
-        with open(file_name, 'r', encoding='utf-8', errors='replace') as file:
-            line_num = 0
-            for line in file:
-                line_num += 1
-                for char_position, char in enumerate(line, start=1):
-                    if char == '\uFFFD':  # Skip non-utf-8 characters
-                        continue
-                    if char == '\r' or char == '\f':
-                        char = '\n'
-                    yield char, line_num, char_position
-
-    except Exception as e:
-        # TODO: handle error
-        raise
-
-
 class Cppp:
     """
     This class represents a single translation unit, derived from a C/C++ source file.
@@ -47,8 +19,9 @@ class Cppp:
 
     _predefined_values = {}
     _sys_path = []
+    _file_errs = {}
 
-    def __init__(self, file_name, predefined_values=None, trigraphs_enabled=False,
+    def __init__(self, main_file_name, predefined_values=None, trigraphs_enabled=False,
                  follow_included=False, sys_path=None):
         """
         Class constructor.
@@ -61,7 +34,7 @@ class Cppp:
             sys_path: path list to included files directories.
         """
 
-        self.file_name = file_name
+        self.main_file_name = main_file_name
         self.trigraphs_enabled = trigraphs_enabled
         self.follow_included = follow_included
 
@@ -77,7 +50,41 @@ class Cppp:
             else:
                 self._sys_path = sys_path.copy()
 
-    async def do_translation_phase_1(self, out_queue):
+    def read_input_file(self, file_name):
+        """
+        Read a C/C++ source file character by character.
+
+            Parameters:
+                file_name: main source file.
+
+            Return values:
+                Tuple: Next character, Line number, Character position
+        """
+
+        self._file_errs[file_name] = 0
+
+        try:
+            with open(file_name, 'r', encoding='utf-8', errors='replace') as file:
+                line_num = 0
+
+                for line in file:
+                    line_num += 1
+
+                    for char_position, char in enumerate(line, start=1):
+                        if char == '\uFFFD':  # Skip non-utf-8 characters
+                            self._file_errs[file_name] += 1
+                            continue
+
+                        if char == '\r' or char == '\f':
+                            char = '\n'
+
+                        yield char, line_num, char_position
+
+        except Exception as e:
+            # TODO: handle error
+            raise
+
+    async def do_translation_phase_1(self, file_name, out_queue):
         """
         Perform the first translation phase:
             Physical source file characters are mapped to the source character set.
@@ -96,7 +103,7 @@ class Cppp:
         escape_char = False
 
         # Add character to temp buffer
-        for char, line_num, char_num in read_input_file(self.file_name):
+        for char, line_num, char_num in self.read_input_file(file_name):
             if in_string:
                 if char == '\\' and not escape_char:
                     escape_char = True
@@ -169,7 +176,7 @@ class Cppp:
     async def do_parse_tu(self):
         queue_phase_1 = asyncio.Queue(5)
 
-        phase_1_task = asyncio.create_task(self.do_translation_phase_1(queue_phase_1))
+        phase_1_task = asyncio.create_task(self.do_translation_phase_1(self.main_file_name, queue_phase_1))
         phase_2_task = asyncio.create_task(self.do_translation_phase_2(queue_phase_1))
 
         await asyncio.gather(phase_1_task, phase_2_task)
