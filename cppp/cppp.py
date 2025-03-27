@@ -178,7 +178,7 @@ class Cppp:
 
         await out_queue.put(None)
 
-    async def do_translation_phase_3_remove_comments(self, in_queue, out_queue = None):
+    async def do_translation_phase_3_remove_comments(self, in_queue, out_queue):
         """
         Perform the third translation phase - remove comments:
             The source tile is decomposed into preprocessing tokens and sequences of
@@ -226,26 +226,83 @@ class Cppp:
                 char_slash = None
 
             if char_slash:
-                ### Debug Prints ###
-                print(f"{char[0]}", end='')
-                #await out_queue.put(char_slash)
+                await out_queue.put(char_slash)
                 char_slash = None
 
-            ### Debug Prints ###
-            print(f"{char[0]}", end='')
-            #await out_queue.put(char)
+            await out_queue.put(char)
 
-        #await out_queue.put(None)
+        await out_queue.put(None)
+
+    async def do_translation_phase_3(self, in_queue, out_queue):
+        """
+        Perform the third translation phase:
+            The source tile is decomposed into preprocessing tokens and sequences of white-space characters.
+            - From the ISO standard document.
+        """
+
+        symbols = ('+', '-', '*', '/', '%', '=', '<', '>', '!',
+                   '=', '&', '|', '^', '~', '.', ':', ';', ',',
+                   '[', ']', '(', ')', '{', '}', '?', '#', '\n')
+
+        token_buf = []
+        token_cur = None
+        push_to_queue = False
+
+        while True:
+            char = await in_queue.get()
+            if not char:
+                break
+
+            if char[0] == ' ':
+                push_to_queue = True
+                token_cur = None
+            elif char[0] in symbols:
+                push_to_queue = True
+                token_cur = char
+            else:
+                push_to_queue = False
+                if len(token_buf) == 0:
+                    token_buf.append(char[1])
+                    token_buf.append(char[0])
+                else:
+                    token_buf[1] = token_buf[1] + char[0]
+
+            if push_to_queue and len(token_buf) > 0:
+                await out_queue.put(token_buf.copy())
+                token_buf.clear()
+            if token_cur:
+                await out_queue.put([token_cur[1], token_cur[0]])
+                token_cur = None
+
+        if len(token_buf) > 0:
+            await out_queue.put(token_buf.copy())
+        if token_cur:
+            await out_queue.put([token_cur[1], token_cur[0]])
+
+        await out_queue.put(None)
+
+    async def do_translation_phase_4(self, in_queue, out_queue = None):
+        while True:
+            char = await in_queue.get()
+            if not char:
+                break
+
+            ### Debug Prints ###
+            print(f"{char[0]} - {char[1:]} ", end=' , ')
 
     async def do_parse_tu(self):
         queue_phase_1 = asyncio.Queue(5)
         queue_phase_2 = asyncio.Queue(5)
+        queue_phase_3 = asyncio.Queue(5)
+        queue_phase_4 = asyncio.Queue(5)
 
         phase_1_task = asyncio.create_task(self.do_translation_phase_1(self.main_file_name, queue_phase_1))
         phase_2_task = asyncio.create_task(self.do_translation_phase_2(queue_phase_1, queue_phase_2))
-        phase_3_task = asyncio.create_task(self.do_translation_phase_3_remove_comments(queue_phase_2))
+        phase_3_task_cr = asyncio.create_task(self.do_translation_phase_3_remove_comments(queue_phase_2, queue_phase_3))
+        phase_3_task = asyncio.create_task(self.do_translation_phase_3(queue_phase_3, queue_phase_4))
+        phase_4_task = asyncio.create_task(self.do_translation_phase_4(queue_phase_4))
 
-        await asyncio.gather(phase_1_task, phase_2_task, phase_3_task)
+        await asyncio.gather(phase_1_task, phase_2_task, phase_3_task_cr, phase_3_task, phase_4_task)
 
     def parse_tu(self):
         asyncio.run(self.do_parse_tu())
