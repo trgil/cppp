@@ -7,6 +7,7 @@ License:    MIT License
 """
 
 import asyncio
+from collections import defaultdict
 
 
 class Cppp:
@@ -17,7 +18,7 @@ class Cppp:
         TBD
     """
 
-    _predefined_values = {}
+    _predefined_values = defaultdict(lambda: "")
     _sys_path = []
     _file_errs = {}
 
@@ -42,7 +43,7 @@ class Cppp:
             if not isinstance(predefined_values, dict):
                 raise TypeError("Predefined-Macros dictionary is not in the form of a dictionary.")
             else:
-                self._predefined_values = predefined_values.copy()
+                self._predefined_values.update(predefined_values)
 
         if sys_path:
             if not isinstance(sys_path, list):
