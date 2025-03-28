@@ -23,7 +23,7 @@ class LexerToken:
         return f"LexerToken({self._start}, {self._val})"
 
     def __str__(self):
-        return f"{self._val}"
+        return f"{self._start[0]},{self._start[1]}:{self._val}"
 
     def __add__(self, other):
         if isinstance(other, LexerToken):
@@ -39,5 +39,7 @@ class LexerToken:
     def __eq__(self, other):
         if isinstance(other, LexerToken):
             return self._val == other._val
+        elif isinstance(other, str):
+            return self._val == other
         else:
             raise TypeError("Token compared to non-supported type")
