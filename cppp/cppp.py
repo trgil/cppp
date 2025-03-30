@@ -10,6 +10,7 @@ import asyncio
 from collections import defaultdict, OrderedDict
 # Local imports
 from .lexertoken import LexerToken
+from .directives import *
 
 
 class Cppp:
@@ -302,7 +303,8 @@ class Cppp:
                         token_buf[1] = token_buf[1] + char[0]
 
             if push_to_lst and len(token_buf) > 0:
-                lexer_lst.append(LexerToken(token_buf[0], token_buf[1]))
+                lexer_lst.append(LexerToken(token_buf[0], token_buf[1],
+                                            is_identifier_compatible(token_buf[1])))
                 token_buf.clear()
             if token_cur:
                 if token_cur[0] == '\"':
@@ -315,7 +317,8 @@ class Cppp:
                     token_cur = None
 
         if len(token_buf) > 0:
-            lexer_lst.append(LexerToken(token_buf[0], token_buf[1]))
+            lexer_lst.append(LexerToken(token_buf[0], token_buf[1],
+                                        is_identifier_compatible(token_buf[1])))
         if token_cur:
             lexer_lst.append(LexerToken(token_cur[1], token_cur[0]))
 
@@ -330,27 +333,17 @@ class Cppp:
             - From the ISO standard document.
         """
 
-        self.dbg_print_lexer_lst()
+        self._dbg_print_lexer_lst()
 
-        for i, token in enumerate(lexer_lst, start = 0):
-            if token == "#":
-                if i and lexer_lst[i - 1] != "\n":
-                    # Raise preprocessor error
-                    pass
-                else:
-                    self.process_cpp_directive(lexer_lst, i + 1)
+        # TODO: implement
 
-    def dbg_print_lexer_lst(self):
+    def _dbg_print_lexer_lst(self):
         '''
         Print out main Lexer List for debug
         '''
 
         for token in self._lexer_lst:
             print(token)
-
-    def process_cpp_directive(self, lexer_lst, i):
-        ### Debug prints ###
-        print(f"Processing directive: {lexer_lst[i]}")
 
     async def do_parse_tu_tf3(self, lexer_lst):
         queue_phase_1 = asyncio.Queue(5)
