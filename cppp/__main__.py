@@ -50,6 +50,7 @@ def main():
     if args.D:
         for macro_df in args.D:
             if '=' not in macro_df:
+                # Compatible with GCC CLI flag: '-D name - Predefine name as a macro, with definition 1'.
                 predefined_macros_cli[macro_df] = 1
             else:
                 name, value = macro_df.split('=', 1)
@@ -66,7 +67,7 @@ def main():
     else:
         print("No macros provided.")
 
-    TU.parse_tu()
+    TU.do_tokenize()
 
 
 if __name__ == "__main__":

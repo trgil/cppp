@@ -1,5 +1,5 @@
 """
-A Lexer Token class source: lexertoken.py
+A Lexer Token class source: ltoken.py
 
 Author:     Gil Treibush
 Version:    1.0.0-alpha.1
@@ -14,13 +14,14 @@ class LexerToken:
 
     _val = ""
 
-    def __init__(self, start, val = None, identifier_compatible = None):
+    def __init__(self, start, val = None, identifier_compatible = False, is_separate = False):
         self._start = start
 
         if val:
             self._val = self._val + val
 
         self._identifier_compatible = identifier_compatible
+        self._is_separate = is_separate
 
     def __repr__(self):
         return f"LexerToken({self._start}, {self._val}, {self._identifier_compatible})"
@@ -52,9 +53,17 @@ class LexerToken:
         return self._val
 
     @property
+    def start(self):
+        return self._start
+
+    @property
     def identifier_compatible(self):
         return self._identifier_compatible
 
     @identifier_compatible.setter
     def identifier_compatible(self, value):
         self._identifier_compatible = bool(value)
+
+    @property
+    def is_separate(self):
+        return self._is_separate
