@@ -5,6 +5,8 @@
 
        #lolo True False
 
+#undef DDD
+
 struct cpp_test_01 {
     int test_field_1;
     int test_field_2;

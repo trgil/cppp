@@ -104,10 +104,21 @@ def _cpp_directive_handle_undef(lexer_lst, i, macros_dict, token_len, token_tota
     Process an #undef macro.
     """
 
-    # TODO: to be implemented
+    if token_len != 2:
+        # TODO: handle invalid directive format
+        pass
+    else:
 
-    ### Debug Prints ###
-    print(f"Directive handler: undef")
+        j = 1
+
+        while (i + j) < token_total_len and lexer_lst[i + j] == ' ':
+            j += 1
+
+        if lexer_lst[i + j].val in macros_dict.keys():
+            del macros_dict[lexer_lst[i + j].val]
+        else:
+            # Undef a non-defined macro warning
+            pass
 
     return 0
 
