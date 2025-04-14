@@ -63,7 +63,7 @@ class Cppp:
                     if key in self._macros_dict.keys():
                         # TODO: handle redefinition error
                         pass
-                    self._macros_dict[key] = CMacro(key, macro_lst, (-1, -1))
+                    self._macros_dict[key] = CMacro(macro_lst, (-1, -1))
 
     def pretty_print(self):
         for token in self._lexer_lst:

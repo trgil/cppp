@@ -14,14 +14,13 @@ class LexerToken:
 
     _val = ""
 
-    def __init__(self, start, val = None, identifier_compatible = False, is_separate = False):
+    def __init__(self, start, val = None, identifier_compatible = False):
         self._start = start
 
         if val:
             self._val = self._val + val
 
         self._identifier_compatible = identifier_compatible
-        self._is_separate = is_separate
 
     def __repr__(self):
         return f"LexerToken({self._start}, {self._val}, {self._identifier_compatible})"
@@ -63,7 +62,3 @@ class LexerToken:
     @identifier_compatible.setter
     def identifier_compatible(self, value):
         self._identifier_compatible = bool(value)
-
-    @property
-    def is_separate(self):
-        return self._is_separate

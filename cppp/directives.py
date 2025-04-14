@@ -264,8 +264,18 @@ _cpp_directive_handlers = {
 
 
 def _do_macro_sub(lexer_lst, i, macros_dict):
+    """
+    Perform macro substitution.
+    :param lexer_lst: token list.
+    :param i: current token index.
+    :param macros_dict: defined macros dictionary.
+    :return: macro offset.
+    """
 
-    # TODO: to be implemented
+    ### Debug prints ###
+    print(f"doing macro sub: {lexer_lst[i]}")
+
+    sub_macro = macros_dict[lexer_lst[i].val]
 
     return 1
 
@@ -339,7 +349,7 @@ def directives_do_process(lexer_lst, macros_dict):
     """
     Perform preprocessor directive processing.
     :param lexer_lst: lexer token-list.
-    :param macro_dict: dictionary of defined macros.
+    :param macros_dict: dictionary of defined macros.
     :return: None.
     """
 

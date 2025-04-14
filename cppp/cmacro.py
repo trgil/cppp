@@ -16,8 +16,7 @@ class CMacro:
 
     _params = []
 
-    def __init__(self, name, value = None, source = None):
-        self._name = name
+    def __init__(self, value = None, source = None):
         self._val = value if value else []
         self._source = source
 
@@ -30,36 +29,21 @@ class CMacro:
             # Raise error
             pass
 
-    def __eq__(self, other):
-        if isinstance(other, LexerToken):
-            return self._name == other.val
-        elif isinstance(other, str):
-            return self._name == other
-        else:
-            # Raise error
-            pass
-
     def __repr__(self):
-        return f"CMacro({self._name}, {self._val}, {self._source})"
+        return f"CMacro({self._val}, {self._source})"
 
     def __str__(self):
-        str = f"["
+        str_out = f"["
 
         if self._source == (-1, -1):
-            str = str + f"CLI]"
+            str_out = str_out + f"CLI]"
         else:
-            str = str + f"Line: {self._source[0]}]"
-
-        str = str + f"{self._name}"
+            str_out = str_out + f"Line: {self._source[0]}]"
 
         if self._val:
-            str = str + f"->{self._val}"
+            str_out = str_out + f"->{self._val}"
 
-        return str
-
-    @property
-    def name(self):
-        return self._name
+        return str_out
 
     @property
     def val(self):
@@ -74,7 +58,3 @@ class CMacro:
             self._val.append(other)
         else:
             pass
-
-    def substitute(self, token):
-        # Do simple substitution
-        pass
