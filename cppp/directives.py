@@ -57,7 +57,7 @@ _cpp_20_keywords = [
 _macro_name_rgx = r"^[A-Za-z_][A-Za-z0-9_]*$"
 
 
-def is_identifier_compatible(name):
+def is_identifier_compatible(name: str):
     '''
     Verify the name is compatible with the rules for a valid C/C++ identifier.
     :param name: input name.
@@ -67,7 +67,7 @@ def is_identifier_compatible(name):
     return bool(re.match(_macro_name_rgx, name))
 
 
-def _is_valid_identifier_name(name):
+def _is_valid_identifier_name(name: str):
     '''
     Verify the name is compatible with the rules for a valid C/C++ identifier. Verify that the
     name does not clash with C/C++ keywords or other macros.
@@ -86,7 +86,8 @@ def _is_valid_identifier_name(name):
     return is_identifier_compatible(name)
 
 
-def _cpp_directive_handle_define(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_define(lexer_lst: list, i: int, macros_dict: dict,
+                                 token_len: int, token_total_len: int) -> int:
     """
     Process a #define-type macros.
     """
@@ -99,7 +100,8 @@ def _cpp_directive_handle_define(lexer_lst, i, macros_dict, token_len, token_tot
     return 0
 
 
-def _cpp_directive_handle_undef(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_undef(lexer_lst: list, i: int, macros_dict: dict,
+                                token_len: int, token_total_len: int) -> int:
     """
     Process an #undef macro.
     """
@@ -123,7 +125,8 @@ def _cpp_directive_handle_undef(lexer_lst, i, macros_dict, token_len, token_tota
     return 0
 
 
-def _cpp_directive_handle_if(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_if(lexer_lst: list, i: int, macros_dict: dict,
+                             token_len: int, token_total_len: int) -> int:
     """
     Process an #if macro.
     """
@@ -136,7 +139,8 @@ def _cpp_directive_handle_if(lexer_lst, i, macros_dict, token_len, token_total_l
     return 0
 
 
-def _cpp_directive_handle_elif(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_elif(lexer_lst: list, i: int, macros_dict: dict,
+                               token_len: int, token_total_len: int) -> int:
     """
     Process an #elif macro.
     """
@@ -149,7 +153,8 @@ def _cpp_directive_handle_elif(lexer_lst, i, macros_dict, token_len, token_total
     return 0
 
 
-def _cpp_directive_handle_else(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_else(lexer_lst: list, i: int, macros_dict: dict,
+                               token_len: int, token_total_len: int) -> int:
     """
     Process an #else macro.
     """
@@ -162,7 +167,8 @@ def _cpp_directive_handle_else(lexer_lst, i, macros_dict, token_len, token_total
     return 0
 
 
-def _cpp_directive_handle_endif(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_endif(lexer_lst: list, i: int, macros_dict: dict,
+                                token_len: int, token_total_len: int) -> int:
     """
     Process an #endif macro.
     """
@@ -175,7 +181,8 @@ def _cpp_directive_handle_endif(lexer_lst, i, macros_dict, token_len, token_tota
     return 0
 
 
-def _cpp_directive_handle_defs_ifdef(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_defs_ifdef(lexer_lst: list, i: int, macros_dict: dict,
+                                     token_len: int, token_total_len: int) -> int:
     """
     Process an #ifdef macro.
     """
@@ -188,7 +195,8 @@ def _cpp_directive_handle_defs_ifdef(lexer_lst, i, macros_dict, token_len, token
     return 0
 
 
-def _cpp_directive_handle_defs_ifndef(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_defs_ifndef(lexer_lst: list, i: int, macros_dict: dict,
+                                      token_len: int, token_total_len: int) -> int:
     """
     Process an #ifndef macro.
     """
@@ -201,7 +209,8 @@ def _cpp_directive_handle_defs_ifndef(lexer_lst, i, macros_dict, token_len, toke
     return 0
 
 
-def _cpp_directive_handle_include(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_include(lexer_lst: list, i: int, macros_dict: dict,
+                                  token_len: int, token_total_len: int) -> int:
     """
     Process an #include macro.
     """
@@ -214,7 +223,8 @@ def _cpp_directive_handle_include(lexer_lst, i, macros_dict, token_len, token_to
     return 0
 
 
-def _cpp_directive_handle_error(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_error(lexer_lst: list, i: int, macros_dict: dict,
+                                token_len: int, token_total_len: int) -> int:
     """
     Process an #error macro - Not currently supported!
     """
@@ -222,7 +232,8 @@ def _cpp_directive_handle_error(lexer_lst, i, macros_dict, token_len, token_tota
     return 0
 
 
-def _cpp_directive_handle_warning(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_warning(lexer_lst: list, i: int, macros_dict: dict,
+                                  token_len: int, token_total_len: int) -> int:
     """
     Process a #warning macro - Not currently supported!
     """
@@ -230,7 +241,8 @@ def _cpp_directive_handle_warning(lexer_lst, i, macros_dict, token_len, token_to
     return 0
 
 
-def _cpp_directive_handle_line(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_line(lexer_lst: list, i: int, macros_dict: dict,
+                               token_len: int, token_total_len: int) -> int:
     """
     Process a #line macro - Not currently supported!
     """
@@ -238,7 +250,8 @@ def _cpp_directive_handle_line(lexer_lst, i, macros_dict, token_len, token_total
     return 0
 
 
-def _cpp_directive_handle_pragma(lexer_lst, i, macros_dict, token_len, token_total_len):
+def _cpp_directive_handle_pragma(lexer_lst: list, i: int, macros_dict: dict,
+                                 token_len: int, token_total_len: int) -> int:
     """
     Process a #pragma macro - Not currently supported!
     """
@@ -263,7 +276,7 @@ _cpp_directive_handlers = {
 }
 
 
-def _do_macro_sub(lexer_lst, i, macros_dict):
+def _do_macro_sub(lexer_lst: list, i: int, macros_dict: dict):
     """
     Perform macro substitution.
     :param lexer_lst: token list.
@@ -280,7 +293,7 @@ def _do_macro_sub(lexer_lst, i, macros_dict):
     return 1
 
 
-def _cpp_directive_get_size(lexer_lst, i):
+def _cpp_directive_get_size(lexer_lst: list, i: int):
     """
     Find the size of the defined macro - from '#' to '\n'.
     :param lexer_lst: lexer token-list.
@@ -302,7 +315,7 @@ def _cpp_directive_get_size(lexer_lst, i):
     return directive_tokens, directive_non_space_tokens
 
 
-def _do_perform_directive(lexer_lst, i, macros_dict):
+def _do_perform_directive(lexer_lst: list, i: int, macros_dict: dict):
     """
     Perform preprocessor directive processing.
     :param lexer_lst: lexer token-list.
@@ -345,7 +358,7 @@ def _do_perform_directive(lexer_lst, i, macros_dict):
         return 1 # Handle as if not a directive
 
 
-def directives_do_process(lexer_lst, macros_dict):
+def directives_do_process(lexer_lst: list, macros_dict: dict):
     """
     Perform preprocessor directive processing.
     :param lexer_lst: lexer token-list.

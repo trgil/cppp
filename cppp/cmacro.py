@@ -16,7 +16,7 @@ class CMacro:
 
     _params = []
 
-    def __init__(self, value = None, source = None):
+    def __init__(self, value: list = None, source: tuple = None):
         self._val = value if value else []
         self._source = source
 

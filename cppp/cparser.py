@@ -12,7 +12,7 @@ from .ltoken import LexerToken
 from .directives import is_identifier_compatible
 
 
-def read_input_file(file_name):
+def read_input_file(file_name: str):
     """
     Read a C/C++ source file character by character, and perform some of the first translation phase steps.
         Physical source file characters are mapped to the source character set.
@@ -49,7 +49,7 @@ def read_input_file(file_name):
         raise
 
 
-async def read_input_string(in_str, out_queue):
+async def read_input_string(in_str: str, out_queue):
 
     _in_string_errs = 0
 
@@ -68,7 +68,7 @@ async def read_input_string(in_str, out_queue):
     # TODO: output _in_string_errs
 
 
-async def do_translation_phase_1(file_name, out_queue, trigraphs_enabled = False):
+async def do_translation_phase_1(file_name: str, out_queue, trigraphs_enabled: bool = False):
     """
     Perform the first translation phase:
         Physical source file characters are mapped to the source character set.
@@ -296,7 +296,7 @@ async def do_translation_phase_3_remove_comments(in_queue, out_queue):
     await out_queue.put(None)
 
 
-async def do_translation_phase_3_tokenize(in_queue, lexer_lst):
+async def do_translation_phase_3_tokenize(in_queue, lexer_lst: list):
     """
     Perform the third translation phase:
         The source tile is decomposed into preprocessing tokens and sequences of white-space characters.
@@ -374,7 +374,7 @@ async def do_translation_phase_3_tokenize(in_queue, lexer_lst):
         lexer_lst.append(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
 
 
-async def do_tokenize_from_string(in_string):
+async def do_tokenize_from_string(in_string: str):
     '''
     Read a short string and perform tokenization, as if it appeared during the third translation phase.
     :param in_string: input code string
@@ -405,7 +405,7 @@ async def do_tokenize_from_string(in_string):
     return parse_lst
 
 
-async def do_tokenize_from_file(file_name):
+async def do_tokenize_from_file(file_name: str):
     '''
     Read a source file and perform the first three translation phases producing a preprocessor token list.
     :param file_name: input source file

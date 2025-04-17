@@ -14,7 +14,7 @@ class LexerToken:
 
     _val = ""
 
-    def __init__(self, start, val = None, identifier_compatible = False):
+    def __init__(self, start: set[int], val = None, identifier_compatible = False):
         self._start = start
 
         if val:
