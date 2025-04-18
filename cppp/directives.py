@@ -86,16 +86,114 @@ def _is_valid_identifier_name(name: str):
     return is_identifier_compatible(name)
 
 
+def _get_define_params(lexer_lst: list, i_start: int, i_end: int):
+    """
+    Parse a 'define' macro parameters.
+    """
+
+    variadic_macro = False
+    start_offset = 0
+    end_offset = 0
+
+    # Handle variadic macros
+    if i_end - i_start >= 2:
+        if lexer_lst[i_end] == '.' and lexer_lst[i_end - 1] == '.' and lexer_lst[i_end - 2] == '.':
+            end_offset = 3
+
+            while (i_end - end_offset) > i_start and lexer_lst[i_end - end_offset] == ' ':
+                end_offset += 1
+
+            if (i_end - end_offset) <= i_start or lexer_lst[i_end - end_offset] == ',':
+                # This is a valid variadic macro
+                end_offset += 1
+                variadic_macro = True
+
+            else:
+                # TODO: not a valid variadic macro, raise error
+                return False, None
+
+    macro_params = []
+    valid_param = False
+    valid_delimiter = True
+
+    # Find all parameters
+    while (i_start + start_offset) <= (i_end - end_offset):
+        if valid_delimiter and not valid_param and lexer_lst[i_start + start_offset].identifier_compatible:
+            macro_params.append(lexer_lst[i_start + start_offset])
+            valid_param = True
+            valid_delimiter = False
+        elif valid_param and not valid_delimiter and lexer_lst[i_start + start_offset] == ',':
+            valid_param = False
+            valid_delimiter = True
+        elif lexer_lst[i_start + start_offset] != ' ':
+            # TODO: not a valid param list, raise error
+            return False, None
+
+        start_offset += 1
+
+    if valid_delimiter and not valid_param:
+        # TODO: not a valid param list, raise error
+        return False, None
+
+    return variadic_macro, macro_params
+
+
 def _cpp_directive_handle_define(lexer_lst: list, i: int, macros_dict: dict,
                                  token_len: int, token_total_len: int) -> int:
     """
     Process a #define-type macros.
     """
 
-    # TODO: to be implemented
+    if token_len < 2:
+        # TODO: not a valid "define" directive, raise error
+        return 0
 
-    ### Debug Prints ###
-    print(f"Directive handler: define")
+    # Get macro name
+    j = 1
+    while j < token_total_len and lexer_lst[i + j] == ' ':
+        j += 1
+
+    macro_name = lexer_lst[i + j]
+    j += 1
+
+    function_like = False
+    variadic_macro = False
+    macro_params = None
+
+    if token_len > 3 and j < token_total_len and lexer_lst[i + j] == '(':
+        j += 1
+        start = j
+
+        while j < token_total_len:
+            if lexer_lst[i + j] == ')':
+                break
+            j += 1
+        else:
+            # TODO: not a valid "define" directive, raise error
+            return 0
+
+        function_like = True
+
+        variadic_macro, macro_params = _get_define_params(lexer_lst, start, j - 1)
+
+        # TODO: change error handler to exception
+        if macro_params is None:
+            return 0
+
+        j += 1
+
+    if j < token_total_len and lexer_lst[i + j] != ' ':
+        # TODO: not a valid "define" directive, raise error
+        return 0
+
+    macros_data = []
+    while j < token_total_len:
+        macros_data.append(lexer_lst[i + j])
+        j += 1
+
+    # TODO: check macro re-definition and warn
+
+    macros_dict[macro_name.val] = CMacro(macros_data, macro_params, macro_name.start, function_like, variadic_macro)
 
     return 0
 
@@ -121,90 +219,6 @@ def _cpp_directive_handle_undef(lexer_lst: list, i: int, macros_dict: dict,
         else:
             # Undef a non-defined macro warning
             pass
-
-    return 0
-
-
-def _cpp_directive_handle_if(lexer_lst: list, i: int, macros_dict: dict,
-                             token_len: int, token_total_len: int) -> int:
-    """
-    Process an #if macro.
-    """
-
-    # TODO: to be implemented
-
-    ### Debug Prints ###
-    print(f"Directive handler: if")
-
-    return 0
-
-
-def _cpp_directive_handle_elif(lexer_lst: list, i: int, macros_dict: dict,
-                               token_len: int, token_total_len: int) -> int:
-    """
-    Process an #elif macro.
-    """
-
-    # TODO: to be implemented
-
-    ### Debug Prints ###
-    print(f"Directive handler: elif")
-
-    return 0
-
-
-def _cpp_directive_handle_else(lexer_lst: list, i: int, macros_dict: dict,
-                               token_len: int, token_total_len: int) -> int:
-    """
-    Process an #else macro.
-    """
-
-    # TODO: to be implemented
-
-    ### Debug Prints ###
-    print(f"Directive handler: else")
-
-    return 0
-
-
-def _cpp_directive_handle_endif(lexer_lst: list, i: int, macros_dict: dict,
-                                token_len: int, token_total_len: int) -> int:
-    """
-    Process an #endif macro.
-    """
-
-    # TODO: to be implemented
-
-    ### Debug Prints ###
-    print(f"Directive handler: endif")
-
-    return 0
-
-
-def _cpp_directive_handle_defs_ifdef(lexer_lst: list, i: int, macros_dict: dict,
-                                     token_len: int, token_total_len: int) -> int:
-    """
-    Process an #ifdef macro.
-    """
-
-    # TODO: to be implemented
-
-    ### Debug Prints ###
-    print(f"Directive handler: ifdef")
-
-    return 0
-
-
-def _cpp_directive_handle_defs_ifndef(lexer_lst: list, i: int, macros_dict: dict,
-                                      token_len: int, token_total_len: int) -> int:
-    """
-    Process an #ifndef macro.
-    """
-
-    # TODO: to be implemented
-
-    ### Debug Prints ###
-    print(f"Directive handler: ifndef")
 
     return 0
 
@@ -259,15 +273,102 @@ def _cpp_directive_handle_pragma(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-_cpp_directive_handlers = {
-    "define":   _cpp_directive_handle_define,
-    "undef":    _cpp_directive_handle_undef,
+def _cpp_directive_handle_if(lexer_lst: list, i: int, macros_dict: dict,
+                             token_len: int, token_total_len: int, cond_queue: list) -> int:
+    """
+    Process an #if macro.
+    """
+
+    # TODO: to be implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: if")
+
+    return 0
+
+
+def _cpp_directive_handle_elif(lexer_lst: list, i: int, macros_dict: dict,
+                               token_len: int, token_total_len: int, cond_queue: list) -> int:
+    """
+    Process an #elif macro.
+    """
+
+    # TODO: to be implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: elif")
+
+    return 0
+
+
+def _cpp_directive_handle_defs_ifdef(lexer_lst: list, i: int, macros_dict: dict,
+                                     token_len: int, token_total_len: int, cond_queue: list) -> int:
+    """
+    Process an #ifdef macro.
+    """
+
+    # TODO: to be implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: ifdef")
+
+    return 0
+
+
+def _cpp_directive_handle_defs_ifndef(lexer_lst: list, i: int, macros_dict: dict,
+                                      token_len: int, token_total_len: int, cond_queue: list) -> int:
+    """
+    Process an #ifndef macro.
+    """
+
+    # TODO: to be implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: ifndef")
+
+    return 0
+
+
+def _cpp_directive_handle_else(lexer_lst: list, i: int, macros_dict: dict,
+                               token_len: int, token_total_len: int, cond_queue: list) -> int:
+    """
+    Process an #else macro.
+    """
+
+    # TODO: to be implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: else")
+
+    return 0
+
+
+def _cpp_directive_handle_endif(lexer_lst: list, i: int, macros_dict: dict,
+                                token_len: int, token_total_len: int, cond_queue: list) -> int:
+    """
+    Process an #endif macro.
+    """
+
+    # TODO: to be implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: endif")
+
+    return 0
+
+
+_cpp_directive_handlers_conditionals = {
     "if":       _cpp_directive_handle_if,
     "elif":     _cpp_directive_handle_elif,
     "else":     _cpp_directive_handle_else,
     "endif":    _cpp_directive_handle_endif,
     "ifdef":    _cpp_directive_handle_defs_ifdef,
     "ifndef":   _cpp_directive_handle_defs_ifndef,
+}
+
+_cpp_directive_handlers = {
+    "define":   _cpp_directive_handle_define,
+    "undef":    _cpp_directive_handle_undef,
     "include":  _cpp_directive_handle_include,
     "error":    _cpp_directive_handle_error,
     "warning":  _cpp_directive_handle_warning,
@@ -322,8 +423,10 @@ def _do_perform_directive(lexer_lst: list, i: int, macros_dict: dict):
     :param i: current token index.
     :param macro_dict: dictionary of defined macros.
     :return: list index offset after processing the directive.
+    TODO: move to cparser
     """
 
+    _cond_queue = []
     tokens_total_len, tokens_len = _cpp_directive_get_size(lexer_lst, i)
 
     if tokens_len == 0:
@@ -337,8 +440,6 @@ def _do_perform_directive(lexer_lst: list, i: int, macros_dict: dict):
          j += 1
 
     if lexer_lst[i + j].val in _cpp_directive_handlers.keys():
-        # This seems to be a valid directive
-
         # Remove anything prior to the first token
         del lexer_lst[i:i + j]
 
@@ -346,7 +447,22 @@ def _do_perform_directive(lexer_lst: list, i: int, macros_dict: dict):
         directive_handler = _cpp_directive_handlers[lexer_lst[i].val]
 
         # Call handler function
-        directive_offset = directive_handler(lexer_lst, i, macros_dict, tokens_len, tokens_total_len - j)
+        directive_offset = directive_handler(lexer_lst, i, macros_dict, tokens_len, (tokens_total_len - j))
+
+        # Remove the rest of the directive
+        del lexer_lst[i:i + (tokens_total_len - j)]
+
+        return directive_offset
+
+    elif lexer_lst[i + j].val in _cpp_directive_handlers_conditionals.keys():
+        # Remove anything prior to the first token
+        del lexer_lst[i:i + j]
+
+        # Get the directive handler function
+        directive_handler = _cpp_directive_handlers_conditionals[lexer_lst[i].val]
+
+        # Call handler function
+        directive_offset = directive_handler(lexer_lst, i, macros_dict, tokens_len, tokens_total_len - j, _cond_queue)
 
         # Remove the rest of the directive
         del lexer_lst[i:i + (tokens_total_len - j)]
@@ -364,6 +480,7 @@ def directives_do_process(lexer_lst: list, macros_dict: dict):
     :param lexer_lst: lexer token-list.
     :param macros_dict: dictionary of defined macros.
     :return: None.
+    TODO: move to cparser
     """
 
     i = 0

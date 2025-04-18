@@ -16,9 +16,15 @@ class CMacro:
 
     _params = []
 
-    def __init__(self, value: list = None, source: tuple = None):
+    def __init__(self, value: list = None, params: list = None, source: tuple = None,
+                 function_like: bool = False, variadic: bool = False):
         self._val = value if value else []
+        self._params = params if params else []
         self._source = source
+        self._function_like = function_like
+        self._variadic = variadic
+
+        # TODO: assert params and function_like/variadic come together
 
     def __add__(self, other):
         if isinstance(other, CMacro):
