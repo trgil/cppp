@@ -1,14 +1,11 @@
-// CPPP test struct - white space & LB test
+ab
+        a b
+        a  b
+        a          b
+        a
 
-#define AAa( aa,  dd     ,...)
 
-struct cpp_test_01 {
-    int test_field_1;
-    int test_field_2;
-    int test_field_5;
-    int	test_field_6;
-};
-
-ff
-
-#
+        b
+        a "a    b           c"
+        a // a    b         c
+        a /* a    b         c */

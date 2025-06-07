@@ -59,6 +59,14 @@ class CMacro:
     def params(self):
         return self._params
 
+    @property
+    def function_like(self):
+        return self._function_like
+
+    @property
+    def variadic(self):
+        return self._variadic
+
     def append(self, other):
         if isinstance(other, LexerToken):
             self._val.append(other)

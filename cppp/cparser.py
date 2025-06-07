@@ -7,12 +7,13 @@ License:    MIT License
 """
 
 import asyncio
+from typing import Callable
 
 from .ltoken import LexerToken
 from .directives import is_identifier_compatible
 
 
-def read_input_file(file_name: str):
+def input_txt_from_file(file_name: str):
     """
     Read a C/C++ source file character by character, and perform some of the first translation phase steps.
         Physical source file characters are mapped to the source character set.
@@ -26,18 +27,26 @@ def read_input_file(file_name: str):
 
     try:
         with open(file_name, 'r', encoding='utf-8', errors='replace') as file:
-            line_num = 0
+            line_num = 1
+            line_add = 0
+            char_position = 1
 
-            for line in file:
-                line_num += 1
-
-                for char_position, char in enumerate(line, start=1):
+            for text_line in file:
+                for char in text_line:
                     if char == '\uFFFD':  # Skip non-utf-8 characters
                         _file_errs += 1
                         continue
 
+                    char_position += 1
+
+                    if line_add:
+                        line_num += 1
+                        char_position = 1
+
                     if char == '\r' or char == '\f':
                         char = '\n'
+
+                    line_add = True if char == '\n' else False
 
                     yield char, line_num, char_position
 
@@ -49,26 +58,58 @@ def read_input_file(file_name: str):
         raise
 
 
-async def read_input_string(in_str: str, out_queue):
+def input_txt_from_string(text: str):
+    """
+    Read some C/C++ code from string character by character, and perform some of the first translation
+    phase steps.
+        Physical source file characters are mapped to the source character set.
+        New-line characters are replaced with end-of-line indicators.
+        - From the ISO standard document.
+    :param text: input source string.
+    :return: number of encoding errors found in the file.
+    """
 
-    _in_string_errs = 0
+    _file_errs = 0
+    line_num = 1
+    char_position = 1
+    line_add = False
 
-    for char in in_str:
+    corrected_text = (
+        text.replace('\r\n', '\n').replace('\r', '\n').replace('\f', '\n'))
 
-        if char == '\r' or char == '\f':
-            char = '\n'
-        elif char == '\uFFFD':  # Skip non-utf-8 characters
-            _in_string_errs += 1
+    for char in corrected_text:
+        if char == '\uFFFD':  # Skip non-utf-8 characters
+            _file_errs += 1
             continue
 
-        await out_queue.put([char, (-1, -1)])
+        char_position += 1
 
-    await out_queue.put(None)
+        if line_add:
+            line_num += 1
+            char_position = 1
 
-    # TODO: output _in_string_errs
+        line_add = True if char == '\n' else False
+
+        yield char, line_num, char_position
+
+    return _file_errs
 
 
-async def do_translation_phase_1(file_name: str, out_queue, trigraphs_enabled: bool = False):
+async def cat_output_text(in_queue, out_text: list):
+    while True:
+        out_m = await in_queue.get()
+        if not out_m:
+            break
+
+        if isinstance(out_m, LexerToken):
+            txt = out_m.val
+        else:
+            txt, (_, _) = out_m
+
+        out_text.append(txt)
+
+
+async def do_translation_phase_1(input_func: Callable, input_src: str, out_queue, trigraphs_enabled: bool = False):
     """
     Perform the first translation phase:
         Physical source file characters are mapped to the source character set.
@@ -82,14 +123,12 @@ async def do_translation_phase_1(file_name: str, out_queue, trigraphs_enabled: b
                         '<': '{', '>': '}', '-': '~'}
 
     char_buf = []
-
     escape_char = False
-
     in_string = False
     in_comment_c_style = False
     in_comment_cpp_style = False
 
-    for char, line_num, char_num in read_input_file(file_name):
+    for char, line_num, char_num in input_func(input_src):
 
         # Push new chars into the buffer
         if in_string:
@@ -141,8 +180,6 @@ async def do_translation_phase_1(file_name: str, out_queue, trigraphs_enabled: b
                 # Standardize white space to ' '
                 char = ' '
 
-        char_buf.append([char, (line_num, char_num)])
-
         # Handle trigraphs - also expanded inside strings
         if trigraphs_enabled and len(char_buf) > 1:
             if char_buf[-2][0] == '?' and char_buf[-1][0] == '?' and char in trigraph_subs.keys():
@@ -152,6 +189,8 @@ async def do_translation_phase_1(file_name: str, out_queue, trigraphs_enabled: b
                     # Trigraph sequence: '??/' translates to the escape char '\\'
                     escape_char = True
                 continue
+
+        char_buf.append([char, (line_num, char_num)])
 
         # Push new chars into the buffer
         while len(char_buf) > 3:
@@ -183,7 +222,7 @@ async def do_translation_phase_2(in_queue, out_queue):
             escape_char = False
             continue
 
-        elif char[0]  == '\\' and not escape_char:
+        elif char[0] == '\\' and not escape_char:
             escape_char = True
             continue
 
@@ -198,7 +237,7 @@ async def do_translation_phase_2(in_queue, out_queue):
 async def do_translation_phase_3_remove_comments(in_queue, out_queue):
     """
     Perform the third translation phase - remove comments:
-        The source tile is decomposed into preprocessing tokens and sequences of
+        The source file is decomposed into preprocessing tokens and sequences of
         white-space characters (including comments). Each comment is replaced by one space character.
         - From the ISO standard document.
     """
@@ -229,14 +268,11 @@ async def do_translation_phase_3_remove_comments(in_queue, out_queue):
 
         elif in_comment_cpp_style:
             # In a comment - white spaces are preserved.
-            if not escape_char and char[0] == '\n':
+            if char[0] == '\n':
                 in_comment_cpp_style = False
-            elif not escape_char and char[0] == '\\':
-                escape_char = True
             else:
                 escape_char = False
-
-            continue
+                continue
 
         elif in_comment_c_style:
             # In a comment - white spaces are preserved.
@@ -296,14 +332,14 @@ async def do_translation_phase_3_remove_comments(in_queue, out_queue):
     await out_queue.put(None)
 
 
-async def do_translation_phase_3_tokenize(in_queue, lexer_lst: list):
+async def do_translation_phase_3_tokenize(in_queue, out_queue):
     """
     Perform the third translation phase:
         The source tile is decomposed into preprocessing tokens and sequences of white-space characters.
         - From the ISO standard document.
 
-    :param in_queue: lexer token-list.
-    :param lexer_lst: current token index.
+    :param in_queue: input queue.
+    :param out_queue: lexer token output queue.
     :return: None
     """
 
@@ -366,66 +402,149 @@ async def do_translation_phase_3_tokenize(in_queue, lexer_lst: list):
             continue
 
         if save_buf:
-            lexer_lst.append(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
+            await out_queue.put(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
             token_buf.clear()
             save_buf = False
 
     if len(token_buf) > 0:
-        lexer_lst.append(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
+        await out_queue.put(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
+
+    await out_queue.put(None)
 
 
-async def do_tokenize_from_string(in_string: str):
-    '''
-    Read a short string and perform tokenization, as if it appeared during the third translation phase.
-    :param in_string: input code string
-    :return: preprocessor lexer token-list
-    '''
+async def do_translation_phase_4(in_queue, out_queue):
+    """
+    Perform the first translation phase:
+        Preprocessing directives are executed and macro invocations are expanded.
+        A #include preprocessing directive causes the named header or source file to be processed from phase
+        1 through phase 4, recursively.
+        - From the ISO standard document.
+    """
 
-    queue_cli_macro = asyncio.Queue(3)
+    while True:
+        # Get next character from the queue
+        tok = await in_queue.get()
+        if not tok:
+            break
 
-    parse_lst = list()
+        await out_queue.put(tok)
 
-    '''
-    Since the input string does not go through the first two translation phases, it's necessary to
-    validate no illegal sequences appear in the string.
-    '''
-    if '//' in in_string or '/*' in in_string or '*/' in in_string:
-        # TODO: handle invalid input warning
+    await out_queue.put(None)
+
+
+# Summarize all Translation-Phases tasks
+translation_tasks = [
+    do_translation_phase_1,
+    do_translation_phase_2,
+    do_translation_phase_3_remove_comments,
+    do_translation_phase_3_tokenize,
+    do_translation_phase_4
+]
+
+
+async def run_translation(input_funct, input_text: str, phase: int, trigraphs_enabled: bool):
+    """
+    Run preprocessor on input code.
+
+    :param input_funct: input text function.
+    :param input_text: code text for string-input function, source file name for file-input function.
+    :param phase: how many translation phases to run.
+    :param trigraphs_enabled: allow trigraphs expansions.
+    :return: processed output text
+    """
+
+    if phase < 1 or phase > 4:
+        # TODO: add error.
         pass
-    if '\r' in in_string:
-        # TODO: handle unsupported characters in input string warning
-        pass
+    elif phase >= 3:
+        phase += 1
 
-        macro_in_task = asyncio.create_task(read_input_string(in_string, queue_cli_macro))
-        macro_tokenize_task =(
-            asyncio.create_task(do_translation_phase_3_tokenize(queue_cli_macro, parse_lst)))
+    data_queues = [asyncio.Queue() for _ in range(5)]
+    active_tasks =\
+        [asyncio.create_task(translation_tasks[0](input_funct, input_text, data_queues[0], trigraphs_enabled))]
+    out_text = []
 
-        await asyncio.gather(macro_in_task, macro_tokenize_task)
+    for i in range(1, phase):
+        active_tasks.append(translation_tasks[i](data_queues[i - 1], data_queues[i]))
 
-    return parse_lst
+    active_tasks.append(asyncio.create_task(cat_output_text(data_queues[phase - 1], out_text)))
 
+    await asyncio.gather(*active_tasks)
 
-async def do_tokenize_from_file(file_name: str):
-    '''
-    Read a source file and perform the first three translation phases producing a preprocessor token list.
-    :param file_name: input source file
-    :return: preprocessor lexer token-list
-    '''
-
-    queue_phase_1 = asyncio.Queue(5)
-    queue_phase_2 = asyncio.Queue(5)
-    queue_phase_3 = asyncio.Queue(5)
-
-    parse_lst = list()
-
-    phase_1_task = asyncio.create_task(do_translation_phase_1(file_name, queue_phase_1))
-    phase_2_task = asyncio.create_task(do_translation_phase_2(queue_phase_1, queue_phase_2))
-    phase_3_task_cr = asyncio.create_task(do_translation_phase_3_remove_comments(queue_phase_2, queue_phase_3))
-    phase_3_task = asyncio.create_task(do_translation_phase_3_tokenize(queue_phase_3, parse_lst))
-
-    await asyncio.gather(phase_1_task, phase_2_task, phase_3_task_cr, phase_3_task)
-
-    return parse_lst
+    return "".join(out_text)
 
 
-__all__ = ["do_tokenize_from_file", "do_tokenize_from_string"]
+# async def do_tokenize_from_string(in_string: str):
+#     '''
+#     Read a short string and perform tokenization, as if it appeared during the third translation phase.
+#     :param in_string: input code string
+#     :return: preprocessor lexer token-list
+#     '''
+#
+#     queue_cli_macro = asyncio.Queue(3)
+#
+#     parse_lst = list()
+#
+#     '''
+#     Since the input string does not go through the first two translation phases, it's necessary to
+#     validate no illegal sequences appear in the string.
+#     '''
+#     if '//' in in_string or '/*' in in_string or '*/' in in_string:
+#         # TODO: handle invalid input warning
+#         pass
+#     if '\r' in in_string:
+#         # TODO: handle unsupported characters in input string warning
+#         pass
+#
+#         macro_in_task = asyncio.create_task(read_input_string(in_string, queue_cli_macro))
+#         macro_tokenize_task =(
+#             asyncio.create_task(do_translation_phase_3_tokenize(queue_cli_macro, parse_lst)))
+#
+#         await asyncio.gather(macro_in_task, macro_tokenize_task)
+#
+#     return parse_lst
+
+
+# async def do_tokenize_from_file(file_name: str):
+#     '''
+#     Read a source file and perform the first three translation phases producing a preprocessor token list.
+#     :param file_name: input source file
+#     :return: preprocessor lexer token-list
+#     '''
+#
+#     queue_phase_1 = asyncio.Queue(5)
+#     queue_phase_2 = asyncio.Queue(5)
+#     queue_phase_3 = asyncio.Queue(5)
+#
+#     parse_lst = list()
+#
+#     phase_1_task = asyncio.create_task(do_translation_phase_1(file_name, queue_phase_1))
+#     phase_2_task = asyncio.create_task(do_translation_phase_2(queue_phase_1, queue_phase_2))
+#     phase_3_task_cr = asyncio.create_task(do_translation_phase_3_remove_comments(queue_phase_2, queue_phase_3))
+#     phase_3_task = asyncio.create_task(do_translation_phase_3_tokenize(queue_phase_3, parse_lst))
+#
+#     await asyncio.gather(phase_1_task, phase_2_task, phase_3_task_cr, phase_3_task)
+#
+#     return parse_lst
+
+
+# def do_process_directives(lexer_lst: list, macros_dict: dict):
+#     """
+#     Perform preprocessor directive processing.
+#     :param lexer_lst: lexer token-list.
+#     :param macros_dict: dictionary of defined macros.
+#     :return: None.
+#     TODO: move to cparser
+#     """
+#
+#     i = 0
+#     while i < len(lexer_lst):
+#         if lexer_lst[i] == '#':
+#             # This might be a directive
+#             pass
+#
+#         else:
+#             i += 1
+
+
+__all__ = ["run_translation", "input_txt_from_file", "input_txt_from_string"]

@@ -391,6 +391,17 @@ def _do_macro_sub(lexer_lst: list, i: int, macros_dict: dict):
 
     sub_macro = macros_dict[lexer_lst[i].val]
 
+    if sub_macro.function_like:
+        if sub_macro.variadic:
+            # A variadic macro
+            pass
+        else:
+            # A simple function-like macro
+            pass
+    else:
+        # A non-function-like macro
+        pass
+
     return 1
 
 
