@@ -25,4 +25,4 @@ class TestTranslationPhase4:
                                                   4,
                                                   False))
 
-        assert output_text == 'int main(void)\n{\nreturn 0;\n}'
+        assert output_text == '#define A\nint main(void)\n{\nreturn 0;\n}'

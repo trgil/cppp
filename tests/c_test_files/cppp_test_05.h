@@ -1,6 +1,6 @@
 
 // Macros
-
+#define A
 // Code
 int main(void)
 {
