@@ -7,67 +7,189 @@ License:    MIT License
 """
 
 import argparse
-from cppp.cppp import Cppp
+import sys
+import re
+from cppp.cppp import Cppp, VERSION
+from os import path
+
+
+def extract_macro_ops(argv):
+    macro_ops = []
+    for i, arg in enumerate(argv):
+        if arg.startswith('-D'):
+            value = arg[2:] if len(arg) > 2 else argv[i + 1]
+            macro_ops.append(('define', value))
+        elif arg.startswith('-U'):
+            value = arg[2:] if len(arg) > 2 else argv[i + 1]
+            macro_ops.append(('undefine', value))
+    return macro_ops
+
+
+def strip_comments(s):
+    # Remove C++-style comments
+    s = re.sub(r'//.*?(?=\n|$)', '', s)
+    # Remove C-style block comments (greedy match)
+    s = re.sub(r'/\*.*?\*/', '', s, flags=re.DOTALL)
+    return s
+
+
+def is_valid_macro_name(name):
+    return re.match(r'^[A-Za-z_]\w*$', name)
+
+
+def process_cli_macros(macro_ops):
+    macro_table = {}
+
+    for op, raw in macro_ops:
+        raw = raw.strip()
+
+        # Drop illegal line splicing
+        if '\\\n' in raw:
+            print(f"⚠️ Dropping macro due to illegal line splice: {raw}")
+            continue
+
+        # Strip comments
+        clean = strip_comments(raw)
+
+        # Extract macro name before formatting
+        if '=' in clean:
+            name = clean.split('=', 1)[0].strip()
+            formatted = clean.replace('=', ' ', 1)
+        else:
+            name = clean.strip()
+            formatted = name
+
+        if op == 'undefine':
+            if name in macro_table:
+                del macro_table[name]
+            continue
+
+        macro_table[name] = formatted
+
+    return list(macro_table.values())
+
 
 def main():
-    predefined_macros_cli = {}
+    """
+    Handle macros passed from the command line (compatible with GCC conventions):
+
+    '-D name' - Predefine name as a macro, with definition 1.
+
+    '-D name=definition' -  The contents of definition are tokenized and processed as if they
+    appeared during translation phase three in a ‘#define’ directive. In particular, the definition
+    is truncated by embedded newline characters.
+
+    If you are invoking the preprocessor from a shell
+    or shell-like program you may need to use the shell’s quoting syntax to protect characters such
+    as spaces that have a meaning in the shell syntax.
+
+    If you wish to define a function-like macro on the command line, write its argument list with
+    surrounding parentheses before the equals sign (if any). Parentheses are meaningful to most
+    shells, so you should quote the option. With sh and csh,-D'name(args...)=definition' works.
+
+    -D and-U options are processed in the order they are given on the command line. All-imacros
+    file and-include file options are processed after all-D and-U options.
+
+    '-U name' - Cancel any previous definition of name, either built in or provided with a '-D' option.
+
+        - From the GCC documentation.
+    """
+
+    """
+    Since GCC-style "-U" & "-D" flags are order-sensitive and can appear multiple times it's necessary to intercept
+    them directly from sys.argv before they are processed with argparse.
+    """
+    macro_ops = extract_macro_ops(sys.argv)
+    macro_table = process_cli_macros(macro_ops)
 
     # Parse CLI arguments
-    parser = argparse.ArgumentParser(description="Preprocess C/C++ code.")
+    parser = argparse.ArgumentParser(
+        description="CPPP: C/C++ Python Preprocessor",
+        epilog="Note: compling with GCC conventions, -D and -U flags are processed in the order of appearance."
+    )
 
-    # Add the "file name" argument
+    # Input file - positional
     parser.add_argument(
-        'inFilename',  # Positional "file" argument
+        'input_file',
+        type=str,
+        nargs='?',  # Optional argument
         metavar='FILENAME',
-        type=str,
-        help="A valid C/C++ source code file, for processing."
+        help="C/C++ source file to process (can also be passed via: -f/-i/--file)"
     )
+    # Input file - via flag
     parser.add_argument(
-        '-f', '--file',  # Short and long "file" flag
-        dest='inFilename',
+        '-f', '--file', '-i',
+        dest='input_file_flag',
         type=str,
-        help="A valid C/C++ source code file, for processing."
+        required=False,
+        metavar='FILENAME',
+        help='C/C++ source file to process (can also be passed as first positional argument)'
     )
+    # Output file
     parser.add_argument(
-        '-o', '--out',  # Short and long "file" flag
-        dest='outFilename',
+        '-o', '--out',
+        dest='output_file',
         type=str,
-        default='out.i',
-        help="Output file name."
+        required=False,
+        metavar='FILENAME',
+        help='Output file (defaults to <input filename>.i)'
     )
+    # Macro definitions - for documentation purposes only!
     parser.add_argument(
         '-D',
         metavar='MACRO[=VALUE]',
-        action='append',
-        help="Pass CLI macro definitions as -DMACRO[=VALUE]"
+        help='Pass CLI macro definitions (e.g. -DDEBUG or -DVERSION=2)'
+    )
+    # Macro undefinitions - for documentation purposes only!
+    parser.add_argument(
+        '-U',
+        metavar='MACRO',
+        help='Pass CLI macro to undefine (e.g. -UOLD_MACRO)'
+    )
+    # Version
+    parser.add_argument(
+        '-v', '--version',
+        action='store_true',
+        help='Show version and exit'
     )
 
     args = parser.parse_args()
 
-    if args.inFilename is None:
-        parser.error("The valid filename is required. Passed as first positional argument or using -f/--file.")
+    # Handle version
+    if args.version:
+        print(f"CPPP version: {VERSION}")
+        sys.exit(0)
 
-    if args.D:
-        for macro_df in args.D:
-            if '=' not in macro_df:
-                # Compatible with GCC CLI flag: '-D name - Predefine name as a macro, with definition 1'.
-                predefined_macros_cli[macro_df] = 1
-            else:
-                name, value = macro_df.split('=', 1)
-                predefined_macros_cli[name] = int(value) if value.isdigit() else value
+    # TODO: add option to input code from sys.stdin (e.g. "sys.stdin.read()" as input file)
+    input_file = args.input_file_flag or args.input_file
+    if not input_file:
+        parser.error("No input file provided. As first positional argument or -f/-i/--file.")
 
-    TU = Cppp(args.inFilename, predefined_values=predefined_macros_cli)
+    # Derive an output-file name.
+    base_name = path.splitext(input_file)[0]
+    output_file = args.output_file or (base_name + '.i')
 
-    ### Debug Prints ###
-    print(f"The file name is: {args.inFilename}")
-
-    if args.D:
-        print("Macros provided:")
-        print(predefined_macros_cli)
-    else:
-        print("No macros provided.")
-
-    TU.do_tokenize()
+    # if args.D:
+    #     for macro_df in args.D:
+    #         if '=' not in macro_df:
+    #             # Compatible with GCC CLI flag: '-D name - Predefine name as a macro, with definition 1'.
+    #             predefined_macros_cli[macro_df] = 1
+    #         else:
+    #             name, value = macro_df.split('=', 1)
+    #             predefined_macros_cli[name] = int(value) if value.isdigit() else value
+    #
+    # TU = Cppp(args.inFilename, predefined_values=predefined_macros_cli)
+    #
+    # ### Debug Prints ###
+    # print(f"The file name is: {args.inFilename}")
+    #
+    # if args.D:
+    #     print("Macros provided:")
+    #     print(predefined_macros_cli)
+    # else:
+    #     print("No macros provided.")
+    #
+    # TU.do_tokenize()
 
 
 if __name__ == "__main__":
