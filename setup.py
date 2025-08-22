@@ -15,7 +15,6 @@ setup(
     ],
     extras_require={
         'cli': [            # For running standalone
-            'argparse',
         ],
         'dev': [            # For development
             'pytest',       # For testing
