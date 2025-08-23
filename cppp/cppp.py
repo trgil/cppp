@@ -32,7 +32,7 @@ class Cppp:
     _file_errs = {}
 
     def __init__(self, main_file_name, predefined_values=None, trigraphs_enabled=False,
-                 follow_included=False, sys_path=None):
+                 follow_included=False, include_paths=None):
         """
         Class constructor.
 
@@ -41,31 +41,30 @@ class Cppp:
             predefined_values: a dictionary of predefined macros.
             trigraphs_enabled: flag - enable trigraph expansion.
             follow_included: flag - include and process included files.
-            sys_path: path list to included files directories.
+            include_paths: path list to included files directories.
         """
 
         self._main_file_name = main_file_name
         self._trigraphs_enabled = trigraphs_enabled
         self._follow_included = follow_included
 
-        if sys_path:
-            if not isinstance(sys_path, list):
-                raise TypeError("System path list is not in the form of a list.")
+        if include_paths:
+            if not isinstance(include_paths, list):
+                raise TypeError("Include-paths list is not in the form of a list.")
             else:
-                self._sys_path = sys_path.copy()
+                self._sys_path = include_paths.copy()
 
-
-        if predefined_values:
-            if not isinstance(predefined_values, dict):
-                raise TypeError("Predefined-Macros dictionary is not in the form of a dictionary.")
-
-            else:
-                for key, val in predefined_values.items():
-                    macro_lst = asyncio.run(do_tokenize_from_string(str(val)))
-                    if key in self._macros_dict.keys():
-                        # TODO: handle redefinition error
-                        pass
-                    self._macros_dict[key] = CMacro(macro_lst, None, (-1, -1))
+        # if predefined_values:
+        #     if not isinstance(predefined_values, dict):
+        #         raise TypeError("Predefined-Macros dictionary is not in the form of a dictionary.")
+        #
+        #     else:
+        #         for key, val in predefined_values.items():
+        #             macro_lst = asyncio.run(do_tokenize_from_string(str(val)))
+        #             if key in self._macros_dict.keys():
+        #                 # TODO: handle redefinition error
+        #                 pass
+        #             self._macros_dict[key] = CMacro(macro_lst, None, (-1, -1))
 
     def pretty_print(self):
         for token in self._lexer_lst:
@@ -77,6 +76,7 @@ class Cppp:
                 print(f" ${token.val}", end = "")
 
     def do_tokenize(self):
-        self._lexer_lst = asyncio.run(do_tokenize_from_file(self._main_file_name))
-        directives_do_process(self._lexer_lst, self._macros_dict)
-        self.pretty_print()
+        # self._lexer_lst = asyncio.run(do_tokenize_from_file(self._main_file_name))
+        # directives_do_process(self._lexer_lst, self._macros_dict)
+        # self.pretty_print()
+        pass
