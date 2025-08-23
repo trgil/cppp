@@ -19,12 +19,17 @@ def extract_macro_ops(argv):
     macro_ops = []
 
     for i, arg in enumerate(argv):
-        if arg.startswith('-D'):
-            value = arg[2:] if len(arg) > 2 else argv[i + 1]
-            macro_ops.append(('define', value))
-        elif arg.startswith('-U'):
-            value = arg[2:] if len(arg) > 2 else argv[i + 1]
-            macro_ops.append(('undefine', value))
+        try:
+            if arg.startswith('-D'):
+                value = arg[2:] if len(arg) > 2 else argv[i + 1]
+                macro_ops.append(('define', value))
+            elif arg.startswith('-U'):
+                value = arg[2:] if len(arg) > 2 else argv[i + 1]
+                macro_ops.append(('undefine', value))
+        except IndexError:
+            print(f"Missing macro value after {arg}.")
+            # TODO: add error handle
+
     return macro_ops
 
 
@@ -257,12 +262,6 @@ def main():
     # Derive an output-file name
     base_name = os.path.splitext(input_file)[0]
     output_file = args.output_file or (base_name + '.i')
-
-    print("Input file: " + input_file + " Output file: " + output_file)
-    print("macros:")
-    print(macro_table)
-    print("include paths:")
-    print(include_paths)
 
     # if args.D:
     #     for macro_df in args.D:

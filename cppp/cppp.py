@@ -31,7 +31,7 @@ class Cppp:
     _sys_path = []
     _file_errs = {}
 
-    def __init__(self, main_file_name, predefined_values=None, trigraphs_enabled=False,
+    def __init__(self, input_file, cli_macros=None, trigraphs_enabled=False,
                  follow_included=False, include_paths=None):
         """
         Class constructor.
@@ -44,7 +44,7 @@ class Cppp:
             include_paths: path list to included files directories.
         """
 
-        self._main_file_name = main_file_name
+        self._input_file = input_file
         self._trigraphs_enabled = trigraphs_enabled
         self._follow_included = follow_included
 
@@ -52,7 +52,7 @@ class Cppp:
             if not isinstance(include_paths, list):
                 raise TypeError("Include-paths list is not in the form of a list.")
             else:
-                self._sys_path = include_paths.copy()
+                self._include_path = include_paths.copy()
 
         # if predefined_values:
         #     if not isinstance(predefined_values, dict):
