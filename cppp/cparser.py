@@ -11,6 +11,7 @@ from typing import Callable
 
 from .ltoken import LexerToken
 from .directives import is_identifier_compatible
+from .cmacro import CMacro
 
 
 def input_txt_from_file(file_name: str):
@@ -451,6 +452,39 @@ async def do_translation_phase_4(in_queue, out_queue, macro_dict: dict = None):
     await out_queue.put(None)
 
 
+async def do_macro_parse(in_queue):
+    """
+    Perform macro translation from tokens from the CLI into a cMacro object.
+    """
+
+    macro_tokens = []
+    truncate_space = True
+
+    while True:
+        # Get next character from the queue
+        tok = await in_queue.get()
+        if not tok:
+            break
+
+        if truncate_space and tok.val == " ":
+            continue
+        elif tok.val == " ":
+            truncate_space = True
+        else:
+            truncate_space = False
+
+        macro_tokens.append(tok)
+
+    if not macro_tokens:
+        return None
+
+    new_macro = CMacro()
+
+    # TODO: Parse macro and return value
+
+    return new_macro
+
+
 # Summarize all Translation-Phases tasks
 translation_tasks = [
     do_translation_phase_1,
@@ -492,10 +526,26 @@ async def run_translation(input_funct, input_text: str, phase: int, trigraphs_en
 
     active_tasks.append(asyncio.create_task(cat_output_text(data_queues[phase - 1], out_text)))
 
-    print("")
+    # TODO: handle exceptions returning from pipe execution
     await asyncio.gather(*active_tasks)
 
     return "".join(out_text)
 
 
-__all__ = ["run_translation", "input_txt_from_file", "input_txt_from_string"]
+async def make_macro_from_cli(macro_txt):
+    queue_phase_1 = asyncio.Queue(5)
+    queue_phase_3 = asyncio.Queue(5)
+
+    phase_1_task = asyncio.create_task(
+        do_translation_phase_1(input_txt_from_string, macro_txt, queue_phase_1))
+    phase_3_task = asyncio.create_task(
+        do_translation_phase_3_tokenize(queue_phase_1, queue_phase_3))
+    macro_parser_task = asyncio.create_task(
+        do_macro_parse(queue_phase_3))
+
+    # TODO: handle exceptions returning from pipe execution
+    new_macro = await asyncio.gather(phase_1_task, phase_3_task, macro_parser_task)
+
+    return new_macro
+
+__all__ = ["run_translation", "input_txt_from_file", "input_txt_from_string", "make_macro_from_cli"]

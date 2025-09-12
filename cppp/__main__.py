@@ -35,6 +35,11 @@ def extract_macro_ops(argv):
 
 # Remove comments from CLI parameters
 def strip_comments(s):
+    '''
+    This functionality is limited in its ability to remove comments properly compared to
+    macros defined in code. Comment mixing and nesting is not fully supported.
+    '''
+
     # Remove C++-style comments
     s = re.sub(r'//.*?(?=\n|$)', '', s)
     # Remove C-style block comments (greedy match)
@@ -149,6 +154,7 @@ def extract_include_paths(argv):
 
     return include_paths
 
+
 def main():
     """
     Run CPPP directly according to CLI parameters.
@@ -246,6 +252,8 @@ def main():
         help='Show version and exit'
     )
 
+    # TODO: more options: "follow_includes", "expand_trigraphs", "verbose", "build_include_tree".
+
     args = parser.parse_args()
 
     # Handle version
@@ -263,27 +271,9 @@ def main():
     base_name = os.path.splitext(input_file)[0]
     output_file = args.output_file or (base_name + '.i')
 
-    # if args.D:
-    #     for macro_df in args.D:
-    #         if '=' not in macro_df:
-    #             # Compatible with GCC CLI flag: '-D name - Predefine name as a macro, with definition 1'.
-    #             predefined_macros_cli[macro_df] = 1
-    #         else:
-    #             name, value = macro_df.split('=', 1)
-    #             predefined_macros_cli[name] = int(value) if value.isdigit() else value
-    #
-    # TU = Cppp(args.inFilename, predefined_values=predefined_macros_cli)
-    #
-    # ### Debug Prints ###
-    # print(f"The file name is: {args.inFilename}")
-    #
-    # if args.D:
-    #     print("Macros provided:")
-    #     print(predefined_macros_cli)
-    # else:
-    #     print("No macros provided.")
-    #
-    # TU.do_tokenize()
+    TU = Cppp(input_file=input_file, cli_macros=macro_table, include_paths=include_paths)
+
+    # TODO: if verbose, print program running configurations
 
 
 if __name__ == "__main__":

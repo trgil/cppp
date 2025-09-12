@@ -26,13 +26,13 @@ class Cppp:
     """
 
     _lexer_lst = []
-    _macros_dict = {}
+    _macros_lst = []
 
     _sys_path = []
     _file_errs = {}
 
-    def __init__(self, input_file, cli_macros=None, trigraphs_enabled=False,
-                 follow_included=False, include_paths=None):
+    def __init__(self, input_file: str, cli_macros: list = None, include_paths: list = None,
+                 trigraphs_enabled: bool = False, follow_included: bool = False):
         """
         Class constructor.
 
@@ -53,6 +53,12 @@ class Cppp:
                 raise TypeError("Include-paths list is not in the form of a list.")
             else:
                 self._include_path = include_paths.copy()
+
+        if isinstance(cli_macros, list) and cli_macros:
+            for macro_txt in cli_macros:
+                print("Processing macro: " + macro_txt) # DEBUG
+                asyncio.run(make_macro_from_cli(macro_txt))
+                # TODO: add macro to TU macro list (if not None)
 
         # if predefined_values:
         #     if not isinstance(predefined_values, dict):
@@ -75,8 +81,11 @@ class Cppp:
             else:
                 print(f" ${token.val}", end = "")
 
-    def do_tokenize(self):
+    def do_preprocess(self):
         # self._lexer_lst = asyncio.run(do_tokenize_from_file(self._main_file_name))
         # directives_do_process(self._lexer_lst, self._macros_dict)
         # self.pretty_print()
+        pass
+
+    def do_output(self, output_file):
         pass
