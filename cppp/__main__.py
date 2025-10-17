@@ -54,6 +54,11 @@ def is_valid_macro_name(name):
 
 # Process all define/undefine CLI options
 def process_cli_macros(macro_ops):
+    '''
+    This functionality is limited in its ability to process macros directives properly compared
+    to macros defined in code. Complex redefinitions and name conflicts might not be processed
+    properly.
+    '''
     macro_table = {}
 
     for op, raw in macro_ops:

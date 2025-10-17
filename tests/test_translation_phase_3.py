@@ -17,7 +17,8 @@ Author: Gil Treibush
 import pytest
 from cppp.cparser import (input_txt_from_file, input_txt_from_string, do_translation_phase_1,
                           do_translation_phase_2, do_translation_phase_3_remove_comments,
-                          do_translation_phase_3_tokenize, cat_output_text)
+                          do_translation_phase_3_tokenize, do_translation_phase_3_aggregate_tokens,
+                          cat_output_text)
 import asyncio
 
 
@@ -66,8 +67,8 @@ class TestTranslationPhase3_1:
 async def do_run_phase_iii_ii(input_funct, input_text: str, trigraphs_enabled: bool):
     queue_phase_1 = asyncio.Queue(5)
     queue_phase_2 = asyncio.Queue(5)
-    queue_phase_3 = asyncio.Queue(5)
-    queue_phase_4 = asyncio.Queue(5)
+    queue_phase_3_1 = asyncio.Queue(5)
+    queue_phase_3_2 = asyncio.Queue(5)
     out_text = []
 
     phase_1_task = asyncio.create_task(
@@ -75,11 +76,11 @@ async def do_run_phase_iii_ii(input_funct, input_text: str, trigraphs_enabled: b
     phase_2_task = asyncio.create_task(
         do_translation_phase_2(queue_phase_1, queue_phase_2))
     phase_3_1_task = asyncio.create_task(
-        do_translation_phase_3_remove_comments(queue_phase_2, queue_phase_3))
+        do_translation_phase_3_remove_comments(queue_phase_2, queue_phase_3_1))
     phase_3_2_task = asyncio.create_task(
-        do_translation_phase_3_tokenize(queue_phase_3, queue_phase_4))
+        do_translation_phase_3_tokenize(queue_phase_3_1, queue_phase_3_2))
 
-    out_text_task = asyncio.create_task(cat_output_text(queue_phase_4, out_text))
+    out_text_task = asyncio.create_task(cat_output_text(queue_phase_3_2, out_text))
 
     await asyncio.gather(phase_1_task, phase_2_task, phase_3_1_task, phase_3_2_task, out_text_task)
 
@@ -113,3 +114,38 @@ class TestTranslationPhase3_2:
         output_text = asyncio.run(do_run_phase_iii_ii(input_txt_from_string, in_str, False))
 
         assert output_text == ''
+
+
+async def do_run_phase_iii_iii(input_funct, input_text: str, trigraphs_enabled: bool):
+    queue_phase_1 = asyncio.Queue(5)
+    queue_phase_2 = asyncio.Queue(5)
+    queue_phase_3_1 = asyncio.Queue(5)
+    queue_phase_3_2 = asyncio.Queue(5)
+    queue_phase_3_3 = asyncio.Queue(5)
+    out_text = []
+
+    phase_1_task = asyncio.create_task(
+        do_translation_phase_1(input_funct, input_text, queue_phase_1, trigraphs_enabled))
+    phase_2_task = asyncio.create_task(
+        do_translation_phase_2(queue_phase_1, queue_phase_2))
+    phase_3_1_task = asyncio.create_task(
+        do_translation_phase_3_remove_comments(queue_phase_2, queue_phase_3_1))
+    phase_3_2_task = asyncio.create_task(
+        do_translation_phase_3_tokenize(queue_phase_3_1, queue_phase_3_2))
+    phase_3_3_task = asyncio.create_task(
+        do_translation_phase_3_aggregate_tokens(queue_phase_3_2, queue_phase_3_3))
+
+    out_text_task = asyncio.create_task(cat_output_text(queue_phase_3_3, out_text))
+
+    await asyncio.gather(phase_1_task, phase_2_task, phase_3_1_task, phase_3_2_task, phase_3_3_task, out_text_task)
+
+    return "".join(out_text)
+
+
+class TestTranslationPhase3_3:
+    def test_basic_full_tokenization_1(self):
+        in_str = \
+            ('int func1("aabb");\n' + 'int func2(...);' + 'void func2(...) <% %>')
+
+        output_text = asyncio.run(do_run_phase_iii_iii(input_txt_from_string, in_str, False))
+        assert output_text == 'int func1("aabb");\nint func2(...);void func2(...) { }'

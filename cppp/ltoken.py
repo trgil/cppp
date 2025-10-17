@@ -12,13 +12,13 @@ class LexerToken:
     This class represents a single Lexer Token.
     """
 
-    _val = ""
-
-    def __init__(self, start: set[int], val = None, identifier_compatible = False):
+    def __init__(self, start, val=None, identifier_compatible=False):
         self._start = start
 
         if val:
-            self._val = self._val + val
+            self.val = val
+        else:
+            self.val = ""
 
         self._identifier_compatible = identifier_compatible
 
@@ -50,6 +50,12 @@ class LexerToken:
     @property
     def val(self):
         return self._val
+
+    @val.setter
+    def val(self, new_val):
+        if not isinstance(new_val, str):
+            raise TypeError(f"Value must be a string, not {type(new_val).__name__}.")
+        self._val = new_val
 
     @property
     def start(self):

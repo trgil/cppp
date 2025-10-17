@@ -10,8 +10,11 @@ import asyncio
 from typing import Callable
 
 from .ltoken import LexerToken
-from .directives import is_identifier_compatible
-from .cmacro import CMacro
+from .directives import is_identifier_compatible, directives_external_define_do_process
+
+# ##############################################################################
+#                           Common Input/Output Phases
+# ##############################################################################
 
 
 def input_txt_from_file(file_name: str):
@@ -108,6 +111,10 @@ async def cat_output_text(in_queue, out_text: list):
             txt, (_, _) = out_m
 
         out_text.append(txt)
+
+# ##############################################################################
+#                               Translation Phases
+# ##############################################################################
 
 
 async def do_translation_phase_1(input_func: Callable, input_src: str, out_queue, trigraphs_enabled: bool = False):
@@ -333,7 +340,7 @@ async def do_translation_phase_3_remove_comments(in_queue, out_queue):
     await out_queue.put(None)
 
 
-async def do_translation_phase_3_tokenize(in_queue, out_queue):
+async def do_translation_phase_3_tokenize(in_queue, out_queue, keep_trace: bool = True):
     """
     Perform the third translation phase:
         The source tile is decomposed into preprocessing tokens and sequences of white-space characters.
@@ -341,6 +348,7 @@ async def do_translation_phase_3_tokenize(in_queue, out_queue):
 
     :param in_queue: input queue.
     :param out_queue: lexer token output queue.
+    :param keep_trace: Keep track of the trace data for each token.
     :return: None
     """
 
@@ -403,17 +411,89 @@ async def do_translation_phase_3_tokenize(in_queue, out_queue):
             continue
 
         if save_buf:
+            if not keep_trace:
+                token_buf[0] = (-1, -1)
             await out_queue.put(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
             token_buf.clear()
             save_buf = False
 
     if len(token_buf) > 0:
+        if not keep_trace:
+            token_buf[0] = (-1, -1)
         await out_queue.put(LexerToken(token_buf[0], token_buf[1], is_identifier_compatible(token_buf[1])))
 
     await out_queue.put(None)
 
 
-async def do_translation_phase_4(in_queue, out_queue, macro_dict: dict = None):
+async def do_translation_phase_3_aggregate_tokens(in_queue, out_queue):
+    """
+    This is not an official part of the third translation phase (as described by the C standard),
+    but, it performs some additional translation tasks which generally belong to this stage.
+    Translation tasks: combine three '.' symbols into the ellipsis symbol, translate digraphs & combine
+    logical operators into dedicated symbols.
+
+    :param in_queue: lexer token input queue.
+    :param out_queue: lexer token output queue.
+    :return: None
+    """
+
+    token_buf = []
+
+    while True:
+        # Get next token from the queue
+        tok = await in_queue.get()
+        if not tok:
+            break
+
+        # Append the token to the aggregation queue
+        token_buf.append(tok)
+
+        if len(token_buf) > 2:
+            # Handle an ellipsis symbol
+            if token_buf[-3].val == '.' and token_buf[-2].val == '.' and token_buf[-1].val == '.':
+                token_buf.pop()
+                token_buf.pop()
+                token_buf[-1].val = '...'
+
+            # Handle digraphs
+            if token_buf[-2].val == '<':
+                if token_buf[-1].val == ':':
+                    # Digraph "<:" -> '['
+                    token_buf.pop()
+                    token_buf[-1].val = '['
+                elif token_buf[-1].val == '%':
+                    # Digraph "<%" -> '{'
+                    token_buf.pop()
+                    token_buf[-1].val = '{'
+            elif token_buf[-2].val == '%':
+                if token_buf[-1].val == '>':
+                    # Digraph "%>" -> '}'
+                    token_buf.pop()
+                    token_buf[-1].val = '}'
+                elif token_buf[-1].val == ':':
+                    # Digraph "%:" -> '#'
+                    token_buf.pop()
+                    token_buf[-1].val = '#'
+            elif token_buf[-2].val == ':':
+                if token_buf[-1].val == '>':
+                    # Digraph ":>" -> ']'
+                    token_buf.pop()
+                    token_buf[-1].val = ']'
+
+            # TODO: add handling for preprocessor relevant operators
+
+        # Push latest token into the output queue
+        while len(token_buf) > 3:
+            await out_queue.put(token_buf.pop(0))
+
+    # Push remaining tokens into the output queue
+    while len(token_buf) > 0:
+        await out_queue.put(token_buf.pop(0))
+
+    await out_queue.put(None)
+
+
+async def do_translation_phase_4(in_queue, out_queue, macro_dict):
     """
     Perform the first translation phase:
         Preprocessing directives are executed and macro invocations are expanded.
@@ -422,7 +502,7 @@ async def do_translation_phase_4(in_queue, out_queue, macro_dict: dict = None):
         - From the ISO standard document.
     """
 
-    cpp_buf = []
+    directive_buf = []
 
     while True:
         # Get next character from the queue
@@ -430,18 +510,15 @@ async def do_translation_phase_4(in_queue, out_queue, macro_dict: dict = None):
         if not tok:
             break
 
-        if len(cpp_buf):
+        if len(directive_buf):
             if tok.val == '\n':
                 # End the macro read
-                print(f"Found directive:", end=' ')
-                for t in cpp_buf:
-                    print(f"{t.val}", end=' ')
-                cpp_buf.clear()
+                directive_buf.clear()
             else:
-                cpp_buf.append(tok)
+                directive_buf.append(tok)
         elif tok.val == '#':
             # Start macro read
-            cpp_buf.append(tok)
+            directive_buf.append(tok)
         else:
             # Process non-macro text
             if tok.identifier_compatible:
@@ -451,8 +528,12 @@ async def do_translation_phase_4(in_queue, out_queue, macro_dict: dict = None):
 
     await out_queue.put(None)
 
+# ##############################################################################
+#                                   Runners
+# ##############################################################################
 
-async def do_macro_parse(in_queue):
+
+async def do_macro_parse_from_list(in_queue):
     """
     Perform macro translation from tokens from the CLI into a cMacro object.
     """
@@ -475,14 +556,7 @@ async def do_macro_parse(in_queue):
 
         macro_tokens.append(tok)
 
-    if not macro_tokens:
-        return None
-
-    new_macro = CMacro()
-
-    # TODO: Parse macro and return value
-
-    return new_macro
+    return macro_tokens
 
 
 # Summarize all Translation-Phases tasks
@@ -491,13 +565,14 @@ translation_tasks = [
     do_translation_phase_2,
     do_translation_phase_3_remove_comments,
     do_translation_phase_3_tokenize,
+    do_translation_phase_3_aggregate_tokens,
     do_translation_phase_4
 ]
 
 
 async def run_translation(input_funct, input_text: str, phase: int, trigraphs_enabled: bool, macro_dict: None = None):
     """
-    Run preprocessor on input code.
+    Run preprocessor pipeline up to given phase stage, on input code.
 
     :param input_funct: input text function.
     :param input_text: code text for string-input function, source file name for file-input function.
@@ -507,19 +582,27 @@ async def run_translation(input_funct, input_text: str, phase: int, trigraphs_en
     :return: processed output text
     """
 
+    # Translation phase 4 needs a dictionary parameter to track macros
+    if phase >=4 and macro_dict is None:
+        macro_dict = {}
+
+    # Validate phase number
     if phase < 1 or phase > 4:
         # TODO: add error.
         pass
     elif phase >= 3:
-        phase += 1
+        phase += 2  # Because phase 3 adds 3 sub-phases instead of 1 (2 extra)
 
-    data_queues = [asyncio.Queue() for _ in range(5)]
+    # Generate data queues for inner-pipeline communication
+    data_queues = [asyncio.Queue() for _ in range(len(translation_tasks))]
+    # Set initial code input method
     active_tasks =\
         [asyncio.create_task(translation_tasks[0](input_funct, input_text, data_queues[0], trigraphs_enabled))]
     out_text = []
 
+    # Set active pipeline tasks
     for i in range(1, phase):
-        if i == 5:
+        if i == 5:  # Phase 4 processes macros - requires macro dictionary
             active_tasks.append(translation_tasks[i](data_queues[i - 1], data_queues[i], macro_dict))
         else:
             active_tasks.append(translation_tasks[i](data_queues[i - 1], data_queues[i]))
@@ -532,20 +615,42 @@ async def run_translation(input_funct, input_text: str, phase: int, trigraphs_en
     return "".join(out_text)
 
 
-async def make_macro_from_cli(macro_txt):
+async def make_macro_from_cli(macro_txt: str, macro_dict):
+    """
+    Run a reduced translation pipeline for CLI macros only:
+        The contents of definition are tokenized and processed as if they
+        appeared during translation phase three in a ‘#define’ directive.
+            - From the GCC documentation.
+
+    The input should go through a quick processing and comment removal, before getting here.
+
+    :param macro_txt: macro input text.
+    :param macro_dict: dictionary of predefined macros
+    :return: processed output text
+    """
+
     queue_phase_1 = asyncio.Queue(5)
     queue_phase_3 = asyncio.Queue(5)
+    queue_phase_3_2 = asyncio.Queue(5)
 
     phase_1_task = asyncio.create_task(
         do_translation_phase_1(input_txt_from_string, macro_txt, queue_phase_1))
+
     phase_3_task = asyncio.create_task(
-        do_translation_phase_3_tokenize(queue_phase_1, queue_phase_3))
+        do_translation_phase_3_tokenize(queue_phase_1, queue_phase_3, False))
+
+    phase_3_2_task = asyncio.create_task(
+        do_translation_phase_3_aggregate_tokens(queue_phase_3, queue_phase_3_2))
+
     macro_parser_task = asyncio.create_task(
-        do_macro_parse(queue_phase_3))
+        do_macro_parse_from_list(queue_phase_3_2))
 
     # TODO: handle exceptions returning from pipe execution
-    new_macro = await asyncio.gather(phase_1_task, phase_3_task, macro_parser_task)
+    await asyncio.gather(phase_1_task, phase_3_task, phase_3_2_task, macro_parser_task)
+    new_macro_tokens = await macro_parser_task
 
-    return new_macro
+    # TODO: Parse macro and return value
+    directives_external_define_do_process(new_macro_tokens, macro_dict)
+
 
 __all__ = ["run_translation", "input_txt_from_file", "input_txt_from_string", "make_macro_from_cli"]

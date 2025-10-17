@@ -18,9 +18,9 @@ class CMacro:
 
     def __init__(self, value: list = None, params: list = None, source: tuple = None,
                  function_like: bool = False, variadic: bool = False):
-        self._val = value if value else []
-        self._params = params if params else []
-        self._source = source
+        self._val = value if value else [] # By default, the value is missing
+        self._params = params if params else [] # By default, there are no parameters
+        self._source = source if source else (-1, -1) # Default source is the CLI
         self._function_like = function_like
         self._variadic = variadic
 
@@ -47,7 +47,19 @@ class CMacro:
             str_out = str_out + f"Line: {self._source[0]}]"
 
         if self._val:
-            str_out = str_out + f"->{self._val}"
+            str_out = str_out + f"{self._val}"
+
+        if self._params:
+            str_out = str_out + f"{self._params}"
+
+        if self._variadic:
+            str_out = str_out + f" variadic,"
+
+        if self._function_like:
+            str_out = str_out + f" function like,"
+
+        if self._source:
+            str_out = str_out + f" {self._source}"
 
         return str_out
 

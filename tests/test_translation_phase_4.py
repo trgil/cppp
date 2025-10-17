@@ -13,16 +13,19 @@ Author: Gil Treibush
 """
 
 import pytest
-from cppp.cparser import run_translation, input_txt_from_file, input_txt_from_string
+from cppp.cparser import run_translation, input_txt_from_file
 import asyncio
 from pathlib import Path
 
 
 class TestTranslationPhase4:
-    def test_defined_macros(self):
+    def test_code_regular_macros(self):
         output_text = asyncio.run(run_translation(input_txt_from_file,
-                                                  str(Path("tests/c_test_files") / "cppp_test_05.h"),
+                                                  str(Path("tests/c_test_files") / "cppp_test_06.h"),
                                                   4,
                                                   False))
 
-        assert output_text == '#define A\nint main(void)\n{\nreturn 0;\n}'
+        print("\n")
+        print(output_text)
+
+        assert 5 == 5

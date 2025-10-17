@@ -12,6 +12,10 @@ from dataclasses import dataclass
 from .cmacro import CMacro
 from .ltoken import LexerToken
 
+# ##############################################################################
+#                              Halper Structures
+# ##############################################################################
+
 
 @dataclass
 class ConditionalDirective:
@@ -20,6 +24,7 @@ class ConditionalDirective:
     result: bool
 
 
+# Standard C
 _c_keywords = [
     "auto", "break", "case", "char", "const", "continue", "default", "do", "double",
     "else", "enum", "extern", "float", "for", "goto", "if", "int", "long", "register",
@@ -29,6 +34,7 @@ _c_keywords = [
     "_Noreturn", "_Static_assert", "_Thread_local"
 ]
 
+# Standard C++
 _cpp_keywords = [
     "asm", "bool", "catch", "class", "const_cast", "delete", "dynamic_cast",
     "explicit", "export", "false", "friend", "inline", "mutable", "namespace", "new",
@@ -54,7 +60,31 @@ _cpp_20_keywords = [
     "synchronized", "atomic_cancel", "atomic_commit", "atomic_noexcept"
 ]
 
+# Standard C
+_c_predefined_macros_mandatory = [
+    "__DATE__", "__FILE__", "__LINE__", "__STDC__", "__STDC_HOSTED__", "__STDC_VERSION__", "__TIME__"
+]
+
+# Standard C
+_c_predefined_macros_environment = [
+    "__STDC_ISO_10646__", "__STDC_MB_MIGHT_NEQ_WC__", "__STDC_UTF_16__", "__STDC_UTF_32__"
+]
+
+# Standard C
+_c_predefined_macros_conditional_features = [
+    "__STDC_ANALYZABLE__", "__STDC_IEC_559__", "__STDC_IEC_559_COMPLEX__", "__STDC_LIB_EXT1__",
+    "__STDC_NO_COMPLEX__", "__STDC_NO_THREADS__", "__STDC_NO_VLA__", "__STDC_NO_ATOMICS__"
+]
+
 _macro_name_rgx = r"^[A-Za-z_][A-Za-z0-9_]*$"
+
+# TODO: pass to each function by value
+_dbg_line_offset_num = 0
+_dbg_line_offset_file = ""
+
+# ##############################################################################
+#                              Halper Functions
+# ##############################################################################
 
 
 def is_identifier_compatible(name: str):
@@ -64,6 +94,7 @@ def is_identifier_compatible(name: str):
     :return: Boolean - compatibility status.
     '''
 
+    # TODO: return dedicated error message
     return bool(re.match(_macro_name_rgx, name))
 
 
@@ -83,139 +114,168 @@ def _is_valid_identifier_name(name: str):
 
     # TODO: implement other checks
 
+    if name in _c_keywords:
+        # TODO: return dedicated error message
+        return False
+    if name in _cpp_keywords:
+        # TODO: return dedicated error message
+        return False
+    if name in _cpp_11_keywords:
+        # TODO: return dedicated error message
+        return False
+    if name in _cpp_17_keywords:
+        # TODO: return dedicated error message
+        return False
+    if name in _cpp_20_keywords:
+        # TODO: return dedicated error message
+        return False
+    if name in _c_predefined_macros_mandatory:
+        # TODO: return dedicated error message
+        return False
+    if name in _c_predefined_macros_environment:
+        # TODO: return dedicated error message
+        return False
+    if name in _c_predefined_macros_conditional_features:
+        # TODO: return dedicated error message
+        return False
+
     return is_identifier_compatible(name)
 
+# ##############################################################################
+#                             Directive Handlers
+# ##############################################################################
 
-def _get_define_params(lexer_lst: list, i_start: int, i_end: int):
+
+def _cpp_directive_handle_define(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Parse a 'define' macro parameters.
-    """
+    Process a #define-type directive:
+        define_directive ::= "#" [ " " ] "define" " " <identifier> ( function_macro | object_macro )
+        function_macro   ::= "(" [ parameter_list ] ")" [ " " ] [ replacement_text ]
+        object_macro     ::= [ " " replacement_text ]
+        parameter_list   ::= ( <identifier> { "," <identifier> } [ "," "..." ] ) | "..."
+         - From the standard (in EBNF).
 
-    variadic_macro = False
-    start_offset = 0
-    end_offset = 0
-
-    # Handle variadic macros
-    if i_end - i_start >= 2:
-        if lexer_lst[i_end] == '.' and lexer_lst[i_end - 1] == '.' and lexer_lst[i_end - 2] == '.':
-            end_offset = 3
-
-            while (i_end - end_offset) > i_start and lexer_lst[i_end - end_offset] == ' ':
-                end_offset += 1
-
-            if (i_end - end_offset) <= i_start or lexer_lst[i_end - end_offset] == ',':
-                # This is a valid variadic macro
-                end_offset += 1
-                variadic_macro = True
-
-            else:
-                # TODO: not a valid variadic macro, raise error
-                return False, None
-
-    macro_params = []
-    valid_param = False
-    valid_delimiter = True
-
-    # Find all parameters
-    while (i_start + start_offset) <= (i_end - end_offset):
-        if valid_delimiter and not valid_param and lexer_lst[i_start + start_offset].identifier_compatible:
-            macro_params.append(lexer_lst[i_start + start_offset])
-            valid_param = True
-            valid_delimiter = False
-        elif valid_param and not valid_delimiter and lexer_lst[i_start + start_offset] == ',':
-            valid_param = False
-            valid_delimiter = True
-        elif lexer_lst[i_start + start_offset] != ' ':
-            # TODO: not a valid param list, raise error
-            return False, None
-
-        start_offset += 1
-
-    if valid_delimiter and not valid_param:
-        # TODO: not a valid param list, raise error
-        return False, None
-
-    return variadic_macro, macro_params
-
-
-def _cpp_directive_handle_define(lexer_lst: list, i: int, macros_dict: dict,
-                                 token_len: int, token_total_len: int) -> int:
-    """
-    Process a #define-type macros.
+        After verification a new macro is added into the shared macros' dictionary.
     """
 
-    if token_len < 2:
-        # TODO: not a valid "define" directive, raise error
-        return 0
-
-    # Get macro name
-    j = 1
-    while j < token_total_len and lexer_lst[i + j] == ' ':
-        j += 1
-
-    macro_name = lexer_lst[i + j]
-    j += 1
+    token_total_len = len(lexer_lst)
+    i = 0
 
     function_like = False
-    variadic_macro = False
-    macro_params = None
+    variadic = False
 
-    if token_len > 3 and j < token_total_len and lexer_lst[i + j] == '(':
-        j += 1
-        start = j
+    # First token should be macro name
+    if not lexer_lst[i].identifier_compatible:
+        # TODO: add error handling
+        return token_total_len
 
-        while j < token_total_len:
-            if lexer_lst[i + j] == ')':
-                break
-            j += 1
-        else:
-            # TODO: not a valid "define" directive, raise error
-            return 0
+    macro_name = lexer_lst[i].val
+    macro_parameters = []
+    j = 1
 
+    # TODO: check if macro redefined
+    # TODO: check if macro name is valid (check collision with keywords / predefined macros)
+
+    # Handle a function-like macro
+    if token_total_len > 1 and lexer_lst[i + 1].val == '(':
+        # Parser parameter list of a function-like macro
         function_like = True
+        separator_found = True
+        j = 2
 
-        variadic_macro, macro_params = _get_define_params(lexer_lst, start, j - 1)
+        # TODO: add handling for variadic macros
 
-        # TODO: change error handler to exception
-        if macro_params is None:
-            return 0
+        # Read all parameters from '(' to ')'
+        while (i + j) < token_total_len:
 
+            # Remove spaces before parameter
+            while (i + j) < token_total_len and lexer_lst[i + j].val == ' ':
+                j += 1
+
+            # Check if end of parameter list (find the ')' character)
+            if lexer_lst[i + j].val == ')':
+                if len(macro_parameters) > 0 and separator_found:
+                    # TODO: handle error
+                    return token_total_len
+                break
+
+            # Get next parameter (identifier)
+            if not lexer_lst[i + j].identifier_compatible:
+                if lexer_lst[i + j].val == '...':
+                    if variadic:
+                        # TODO: handle error
+                        return token_total_len
+                    else:
+                        variadic = True
+                else:
+                    # TODO: handle error
+                    return token_total_len
+
+            # We didn't find a ')' character, and we found a parameter, we must check for a separator.
+            if not separator_found:
+                # TODO: handle error
+                return token_total_len
+
+            macro_parameters.append(lexer_lst[i + j])
+            separator_found = False
+            j += 1
+
+            # Remove spaces
+            while (i + j) < token_total_len and lexer_lst[i + j].val == ' ':
+                j += 1
+
+            # Remove separator
+            if lexer_lst[i + j].val == ',':
+                separator_found = True
+                j += 1
+
+        # Parameter processing is over, make sure we end on an ')'
+        if function_like and lexer_lst[i + j].val != ')':
+            # TODO: handle error
+            return token_total_len
+        else:
+            j += 1
+
+    macro_value = []
+    # Remove value preceding white spaces
+    while (i + j) < token_total_len and lexer_lst[i + j].val == ' ':
         j += 1
 
-    if j < token_total_len and lexer_lst[i + j] != ' ':
-        # TODO: not a valid "define" directive, raise error
-        return 0
-
-    macros_data = []
-    while j < token_total_len:
-        macros_data.append(lexer_lst[i + j])
+    while (i + j) < token_total_len:
+        macro_value.append(lexer_lst[i + j])
         j += 1
 
-    # TODO: check macro re-definition and warn
+    if len(macro_value) == 0:
+        macro_value.append(LexerToken((-1, -1), "1", False))
 
-    macros_dict[macro_name.val] = CMacro(macros_data, macro_params, macro_name.start, function_like, variadic_macro)
+    if function_like:
+        if variadic:
+            macros_dict[macro_name] =(
+                CMacro(value=macro_value, params=macro_parameters, function_like=True, variadic=True))
+        else:
+            macros_dict[macro_name] =(
+                CMacro(value=macro_value, params=macro_parameters, function_like=True, variadic=False))
+    else:
+        macros_dict[macro_name] = CMacro(value=macro_value, function_like=False, variadic=False)
 
-    return 0
+    return token_total_len
 
 
-def _cpp_directive_handle_undef(lexer_lst: list, i: int, macros_dict: dict,
-                                token_len: int, token_total_len: int) -> int:
+def _cpp_directive_handle_undef(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #undef macro.
+    Process an #undef-type directive:
+        undef_directive ::= "#" [ " " ] "undef" " " <identifier>
+         - From the standard (in EBNF).
+
+        If macro exists in the shared macros' dictionary, it will be removed.
     """
 
-    if token_len != 2:
+    if len(lexer_lst) != 1:
         # TODO: handle invalid directive format
         pass
     else:
-
-        j = 1
-
-        while (i + j) < token_total_len and lexer_lst[i + j] == ' ':
-            j += 1
-
-        if lexer_lst[i + j].val in macros_dict.keys():
-            del macros_dict[lexer_lst[i + j].val]
+        if lexer_lst[0].val in macros_dict.keys():
+            del macros_dict[lexer_lst[0].val]
         else:
             # Undef a non-defined macro warning
             pass
@@ -223,10 +283,16 @@ def _cpp_directive_handle_undef(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-def _cpp_directive_handle_include(lexer_lst: list, i: int, macros_dict: dict,
-                                  token_len: int, token_total_len: int) -> int:
+def _cpp_directive_handle_include(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #include macro.
+    Process an #include-type directive:
+        include_directive   ::= "#" [ " " ] "include" " " ( <angle_bracket_path> | <quote_path> | <macro_name> )
+        angle_bracket_path  ::= "<" <filename> ">"
+        quote_path          ::= '"' <filename> '"'
+        macro_name          ::= <identifier>
+         - From the standard (in EBNF).
+
+        Operation: TBD.
     """
 
     # TODO: to be implemented
@@ -237,46 +303,62 @@ def _cpp_directive_handle_include(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-def _cpp_directive_handle_error(lexer_lst: list, i: int, macros_dict: dict,
-                                token_len: int, token_total_len: int) -> int:
+def _cpp_directive_handle_error(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #error macro - Not currently supported!
-    """
+    Process a #error-type directive:
+        warning_directive ::= "#" [ " " ] "warning" [ " " <message_text> ]
+         - From the standard (in EBNF).
 
-    return 0
-
-
-def _cpp_directive_handle_warning(lexer_lst: list, i: int, macros_dict: dict,
-                                  token_len: int, token_total_len: int) -> int:
-    """
-    Process a #warning macro - Not currently supported!
+        After validation, a dedicated error with users' message is returned.
     """
 
     return 0
 
 
-def _cpp_directive_handle_line(lexer_lst: list, i: int, macros_dict: dict,
-                               token_len: int, token_total_len: int) -> int:
+def _cpp_directive_handle_warning(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process a #line macro - Not currently supported!
-    """
+    Process a #warnning-type directive:
+        error_directive ::= "#" [ " " ] "error" [ " " <message_text> ]
+         - From the standard (in EBNF).
 
-    return 0
-
-
-def _cpp_directive_handle_pragma(lexer_lst: list, i: int, macros_dict: dict,
-                                 token_len: int, token_total_len: int) -> int:
-    """
-    Process a #pragma macro - Not currently supported!
+        After validation, a dedicated warning with users' message is returned.
     """
 
     return 0
 
 
-def _cpp_directive_handle_if(lexer_lst: list, i: int, macros_dict: dict,
-                             token_len: int, token_total_len: int, cond_queue: list) -> int:
+def _cpp_directive_handle_line(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #if macro.
+    Process a #line-type directive:
+        line_directive ::= "#" [ " " ] "line" " " <integer_literal> [ " " <string_literal> ]
+         - From the standard (in EBNF).
+
+        Add offset to line number for current file, optionally change the files' name.
+    """
+
+    return 0
+
+
+def _cpp_directive_handle_pragma(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
+    """
+    Process a #pragma-type directive:
+        pragma_directive ::= "#" [ " " ] "pragma" [ <implementation_defined_tokens> ]
+         - From the standard (in EBNF).
+
+        Operation: TBD.
+
+        NOTE: An empty pragma directive is allowed, but would probably produce a warning in most
+        compilers. Thus, a dedicated error message is returned.
+    """
+
+    return 0
+
+
+def _cpp_directive_handle_if(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
+    """
+    Process an #if-type directive:
+        if_line ::= "#" [ " " ] "if" " " <constant_expression>
+         - From the standard (in EBNF).
     """
 
     # TODO: to be implemented
@@ -287,10 +369,11 @@ def _cpp_directive_handle_if(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-def _cpp_directive_handle_elif(lexer_lst: list, i: int, macros_dict: dict,
-                               token_len: int, token_total_len: int, cond_queue: list) -> int:
+def _cpp_directive_handle_elif(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #elif macro.
+    Process a #elif-type directive:
+        elif_line ::= "#" [ " " ] "elif" " " <constant_expression>
+         - From the standard (in EBNF).
     """
 
     # TODO: to be implemented
@@ -301,10 +384,11 @@ def _cpp_directive_handle_elif(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-def _cpp_directive_handle_defs_ifdef(lexer_lst: list, i: int, macros_dict: dict,
-                                     token_len: int, token_total_len: int, cond_queue: list) -> int:
+def _cpp_directive_handle_ifdef(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #ifdef macro.
+    Process a #ifdef-type directive:
+        ifdef_line ::= "#" [ " " ] "ifdef" " " <identifier>
+         - From the standard (in EBNF).
     """
 
     # TODO: to be implemented
@@ -315,10 +399,11 @@ def _cpp_directive_handle_defs_ifdef(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-def _cpp_directive_handle_defs_ifndef(lexer_lst: list, i: int, macros_dict: dict,
-                                      token_len: int, token_total_len: int, cond_queue: list) -> int:
+def _cpp_directive_handle_ifndef(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #ifndef macro.
+    Process a #ifndef-type directive:
+        ifndef_line ::= "#" [ " " ] "ifndef" " " <identifier>
+         - From the standard (in EBNF).
     """
 
     # TODO: to be implemented
@@ -329,10 +414,43 @@ def _cpp_directive_handle_defs_ifndef(lexer_lst: list, i: int, macros_dict: dict
     return 0
 
 
-def _cpp_directive_handle_else(lexer_lst: list, i: int, macros_dict: dict,
-                               token_len: int, token_total_len: int, cond_queue: list) -> int:
+def _cpp_directive_handle_elifdef(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #else macro.
+    Process an #elifdef-type directive:
+        elifdef_line ::= "#" [ " " ] "elifdef" " " <identifier>
+         - From the standard (in EBNF).
+        This directive was added in C++23 standard.
+    """
+
+    # TODO: to implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: ifndef")
+
+    return 0
+
+
+def _cpp_directive_handle_elifndef(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
+    """
+    Process an #elifndef-type directive:
+        elifndef_line ::= "#" [ " " ] "elifndef" " " <identifier>
+         - From the standard (in EBNF).
+        This directive was added in C++23 standard.
+    """
+
+    # TODO: to implemented
+
+    ### Debug Prints ###
+    print(f"Directive handler: ifndef")
+
+    return 0
+
+
+def _cpp_directive_handle_else(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
+    """
+    Process a #else-type directive:
+        else_block  ::= "#" [ " " ] "else" <source_code_block>
+         - From the standard (in EBNF).
     """
 
     # TODO: to be implemented
@@ -343,10 +461,13 @@ def _cpp_directive_handle_else(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-def _cpp_directive_handle_endif(lexer_lst: list, i: int, macros_dict: dict,
-                                token_len: int, token_total_len: int, cond_queue: list) -> int:
+def _cpp_directive_handle_endif(lexer_lst: list, macros_dict: dict, cond_queue: list = None) -> int:
     """
-    Process an #endif macro.
+    Process a #endif-type directive:
+        endif_line ::= "#" [ " " ] "endif"
+         - From the standard (in EBNF).
+
+        Pops out the last conditional statement from the conditionals queue.
     """
 
     # TODO: to be implemented
@@ -357,18 +478,17 @@ def _cpp_directive_handle_endif(lexer_lst: list, i: int, macros_dict: dict,
     return 0
 
 
-_cpp_directive_handlers_conditionals = {
+_cpp_directive_handlers = {
     "if":       _cpp_directive_handle_if,
     "elif":     _cpp_directive_handle_elif,
     "else":     _cpp_directive_handle_else,
     "endif":    _cpp_directive_handle_endif,
-    "ifdef":    _cpp_directive_handle_defs_ifdef,
-    "ifndef":   _cpp_directive_handle_defs_ifndef,
-}
-
-_cpp_directive_handlers = {
-    "define":   _cpp_directive_handle_define,
-    "undef":    _cpp_directive_handle_undef,
+    "ifdef":    _cpp_directive_handle_ifdef,
+    "ifndef":   _cpp_directive_handle_ifndef,
+    "elifndef":   _cpp_directive_handle_elifndef,
+    "elifdef":   _cpp_directive_handle_elifdef,
+    "define": _cpp_directive_handle_define,
+    "undef": _cpp_directive_handle_undef,
     "include":  _cpp_directive_handle_include,
     "error":    _cpp_directive_handle_error,
     "warning":  _cpp_directive_handle_warning,
@@ -376,7 +496,21 @@ _cpp_directive_handlers = {
     "pragma":   _cpp_directive_handle_pragma
 }
 
+# ##############################################################################
+#                             Macro Handlers
+# ##############################################################################
 
+
+def _do_add_predefined_macros(macros_dict: dict):
+    """
+    Add standard predefined macros to the main macros dictionary.
+    :param macros_dict: defined macros dictionary.
+    :return: macro offset.
+    """
+    pass
+
+
+# TODO: move to a dedicated file
 def _do_macro_sub(lexer_lst: list, i: int, macros_dict: dict):
     """
     Perform macro substitution.
@@ -405,87 +539,56 @@ def _do_macro_sub(lexer_lst: list, i: int, macros_dict: dict):
     return 1
 
 
-def _cpp_directive_get_size(lexer_lst: list, i: int):
-    """
-    Find the size of the defined macro - from '#' to '\n'.
-    :param lexer_lst: lexer token-list.
-    :param i: current token index.
-    :return: token-length of the macro.
-    """
-
-    directive_tokens = 1
-    directive_non_space_tokens = 0
-
-    while i + directive_tokens < len(lexer_lst):
-        if lexer_lst[i + directive_tokens] == '\n':
-            break
-        elif lexer_lst[i + directive_tokens] != ' ':
-            directive_non_space_tokens += 1
-
-        directive_tokens += 1
-
-    return directive_tokens, directive_non_space_tokens
-
-
-def _do_perform_directive(lexer_lst: list, i: int, macros_dict: dict):
+def directives_do_process(lexer_lst: list, macros_dict: dict):
     """
     Perform preprocessor directive processing.
-    :param lexer_lst: lexer token-list.
-    :param i: current token index.
-    :param macro_dict: dictionary of defined macros.
-    :return: list index offset after processing the directive.
-    TODO: move to cparser
+    :param lexer_lst: lexer token-list - the list should contain the entire macro (# up to the \n).
+    :param macros_dict: dictionary of defined macros.
+    :return: None.
     """
 
-    _cond_queue = []
-    tokens_total_len, tokens_len = _cpp_directive_get_size(lexer_lst, i)
+    # Get directive line size
+    tokens_total_len = len(lexer_lst)
+    # Get to the first non-white-space token
+    j = 0
+    while j <= tokens_total_len and lexer_lst[j].val == ' ':
+        j += 1
 
-    if tokens_len == 0:
-        # This is an empty directive (might be reported with flags such as '-Wpedantic').
-        del lexer_lst[i]
-        return 0
+    # First token value should be a: '#'
+    if j >= tokens_total_len or lexer_lst[j].val != '#':
+        # TODO: return an error
+        return None
 
-    # Find first directive token
-    j = 1
-    while j < tokens_total_len and lexer_lst[i + j] == ' ':
-         j += 1
+    # Remove space between "#" and the directive name
+    j += 1
+    while j < tokens_total_len and lexer_lst[j].val == ' ':
+        j += 1
 
-    if lexer_lst[i + j].val in _cpp_directive_handlers.keys():
-        # Remove anything prior to the first token
-        del lexer_lst[i:i + j]
+    # Check empty directive
+    if j >= tokens_total_len:
+        # TODO: Return a warning if enabled
+        return None
 
-        # Get the directive handler function
-        directive_handler = _cpp_directive_handlers[lexer_lst[i].val]
+    # Find directive handler and run it
+    directive_name = lexer_lst[j].val
 
-        # Call handler function
-        directive_offset = directive_handler(lexer_lst, i, macros_dict, tokens_len, (tokens_total_len - j))
+    if directive_name not in _cpp_directive_handlers:
+        # TODO: return error "undefined directive"
+        return
 
-        # Remove the rest of the directive
-        del lexer_lst[i:i + (tokens_total_len - j)]
+    # Remove anything prior to the first macro token
+    while j < tokens_total_len and lexer_lst[j].val == ' ':
+        j += 1
+    del lexer_lst[0:j + 1]
 
-        return directive_offset
+    # Get the directive handler function
+    directive_handler = _cpp_directive_handlers[directive_name]
 
-    elif lexer_lst[i + j].val in _cpp_directive_handlers_conditionals.keys():
-        # Remove anything prior to the first token
-        del lexer_lst[i:i + j]
-
-        # Get the directive handler function
-        directive_handler = _cpp_directive_handlers_conditionals[lexer_lst[i].val]
-
-        # Call handler function
-        directive_offset = directive_handler(lexer_lst, i, macros_dict, tokens_len, tokens_total_len - j, _cond_queue)
-
-        # Remove the rest of the directive
-        del lexer_lst[i:i + (tokens_total_len - j)]
-
-        return directive_offset
-
-    else:
-        # TODO: handle unresolved directive error
-        return 1 # Handle as if not a directive
+    # Call handler function
+    directive_offset = directive_handler(lexer_lst, macros_dict)
 
 
-def directives_do_process(lexer_lst: list, macros_dict: dict):
+def directives_external_define_do_process(lexer_lst: list, macros_dict: dict):
     """
     Perform preprocessor directive processing.
     :param lexer_lst: lexer token-list.
@@ -494,32 +597,13 @@ def directives_do_process(lexer_lst: list, macros_dict: dict):
     TODO: move to cparser
     """
 
-    i = 0
+    # Get to the first non-white-space token, delete prior values
+    j = 0
+    while lexer_lst[j].val == ' ':
+        j += 1
+    del lexer_lst[0:j]
 
-    while i < len(lexer_lst):
-        if lexer_lst[i] == '#':
-            # This might be a directive
-
-            j = 1
-
-            while (i - j) >= 0:
-                if lexer_lst[i - j] == ' ':
-                    continue
-                else:
-                    break
-
-            if i == 0 or lexer_lst[i - j] == '\n':
-                # This is indeed a directive
-                directive_offset = _do_perform_directive(lexer_lst, i, macros_dict)
-                i += directive_offset
-
-        elif lexer_lst[i].identifier_compatible and lexer_lst[i].val in macros_dict.keys():
-            # This is a defined macro - do substitution
-            macro_offset = _do_macro_sub(lexer_lst, i, macros_dict)
-            i += macro_offset
-
-        else:
-            i += 1
+    _cpp_directive_handle_define(lexer_lst, macros_dict)
 
 
 __all__ = ["is_identifier_compatible", "directives_do_process"]
