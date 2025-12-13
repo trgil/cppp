@@ -72,6 +72,10 @@ class CMacro:
         return self._params
 
     @property
+    def params_num(self):
+        return len(self._params)
+
+    @property
     def function_like(self):
         return self._function_like
 

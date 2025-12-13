@@ -47,6 +47,9 @@ class LexerToken:
         else:
             raise TypeError("Token compared to non-supported type")
 
+    def __hash__(self):
+        return hash(self._val)
+
     @property
     def val(self):
         return self._val

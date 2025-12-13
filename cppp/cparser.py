@@ -10,7 +10,8 @@ import asyncio
 from typing import Callable
 
 from .ltoken import LexerToken
-from .directives import is_identifier_compatible, directives_external_define_do_process
+from .directives import is_identifier_compatible, directives_external_define_do_process, directives_do_process
+from .substitutions import cpp_directive_do_sub_obj, cpp_directive_do_sub_fun
 
 # ##############################################################################
 #                           Common Input/Output Phases
@@ -31,6 +32,7 @@ def input_txt_from_file(file_name: str):
 
     try:
         with open(file_name, 'r', encoding='utf-8', errors='replace') as file:
+            # TODO: check if can be replaced by: "async with aiofiles.open(file_name, 'r' ... ) as file:"
             line_num = 1
             line_add = 0
             char_position = 1
@@ -222,6 +224,7 @@ async def do_translation_phase_2(in_queue, out_queue):
     escape_char = False
 
     while True:
+        # TODO: check if can be replaced by the walrus operator.
         char = await in_queue.get()
         if not char:
             break
@@ -260,6 +263,7 @@ async def do_translation_phase_3_remove_comments(in_queue, out_queue):
     in_comment_cpp_style = False
 
     while True:
+        # TODO: check if can be replaced by the walrus operator.
         char = await in_queue.get()
         if not char:
             break
@@ -440,6 +444,7 @@ async def do_translation_phase_3_aggregate_tokens(in_queue, out_queue):
     token_buf = []
 
     while True:
+        # TODO: check if can be replaced by the walrus operator.
         # Get next token from the queue
         tok = await in_queue.get()
         if not tok:
@@ -503,28 +508,78 @@ async def do_translation_phase_4(in_queue, out_queue, macro_dict):
     """
 
     directive_buf = []
+    macro_buf = None
+    sub_buf = None
+    parenthesis_count = 0
 
     while True:
+        # TODO: check if can be replaced by the walrus operator.
         # Get next character from the queue
         tok = await in_queue.get()
         if not tok:
             break
 
-        if len(directive_buf):
+        if macro_buf:
+            # We are reading a function like macro?
+
+            if (len(macro_buf) == 1) or parenthesis_count == 0:
+                # First character after the macro name should be a '('
+                if tok.val != '(':
+                    macro_buf = None
+                    # TODO: Return an error
+                    # TODO: find what to do if there are no parenthesis after the macro name.
+                    continue
+
+            if tok.val == '(':
+                parenthesis_count += 1
+                macro_buf.append(tok)
+                continue
+
+            if tok.val == ')':
+                if parenthesis_count > 1:
+                    parenthesis_count -= 1
+                    macro_buf.append(tok)
+                    continue
+                else:
+                    # We finished reading the macro, process it
+                    macro_buf.append(tok)
+                    sub_buf = cpp_directive_do_sub_fun(macro_buf, macro_dict, False)
+                    macro_buf = None
+            else:
+                # TODO: refactor
+                macro_buf.append(tok)
+                continue
+
+        elif len(directive_buf):
+            # We are reading a directive
             if tok.val == '\n':
                 # End the macro read
+                directives_do_process(directive_buf, macro_dict)
                 directive_buf.clear()
             else:
                 directive_buf.append(tok)
         elif tok.val == '#':
-            # Start macro read
+            # We found a directive
             directive_buf.append(tok)
         else:
-            # Process non-macro text
-            if tok.identifier_compatible:
-                # Check if it's a macro name
-                pass
-            await out_queue.put(tok)
+            # Process non-directive-related text
+            if tok.identifier_compatible and (tok.val in macro_dict):
+                if macro_dict[tok.val].function_like:
+                    # Start reading function-like macro
+                    macro_buf = [tok]
+                    parenthesis_count = 0
+                    continue
+                    # sub_buf = cpp_directive_do_sub_fun()
+                    pass
+                else:
+                    sub_buf = cpp_directive_do_sub_obj(tok, macro_dict)
+            else:
+                await out_queue.put(tok)
+
+        if sub_buf:
+            for sub_tok in sub_buf:
+                await out_queue.put(sub_tok)
+            sub_buf = None
 
     await out_queue.put(None)
 

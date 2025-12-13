@@ -159,17 +159,15 @@ def _cpp_directive_handle_define(lexer_lst: list, macros_dict: dict, cond_queue:
     """
 
     token_total_len = len(lexer_lst)
-    i = 0
-
     function_like = False
     variadic = False
 
     # First token should be macro name
-    if not lexer_lst[i].identifier_compatible:
+    if not lexer_lst[0].identifier_compatible:
         # TODO: add error handling
         return token_total_len
 
-    macro_name = lexer_lst[i].val
+    macro_name = lexer_lst[0].val
     macro_parameters = []
     j = 1
 
@@ -177,36 +175,33 @@ def _cpp_directive_handle_define(lexer_lst: list, macros_dict: dict, cond_queue:
     # TODO: check if macro name is valid (check collision with keywords / predefined macros)
 
     # Handle a function-like macro
-    if token_total_len > 1 and lexer_lst[i + 1].val == '(':
-        # Parser parameter list of a function-like macro
+    if token_total_len > 1 and lexer_lst[1].val == '(':
+        # Parse parameter list of a function-like macro
         function_like = True
         separator_found = True
         j = 2
 
-        # TODO: add handling for variadic macros
-
         # Read all parameters from '(' to ')'
-        while (i + j) < token_total_len:
+        while j < token_total_len:
 
             # Remove spaces before parameter
-            while (i + j) < token_total_len and lexer_lst[i + j].val == ' ':
+            while j < token_total_len and lexer_lst[j].val == ' ':
                 j += 1
 
             # Check if end of parameter list (find the ')' character)
-            if lexer_lst[i + j].val == ')':
+            if lexer_lst[j].val == ')':
                 if len(macro_parameters) > 0 and separator_found:
                     # TODO: handle error
                     return token_total_len
                 break
 
             # Get next parameter (identifier)
-            if not lexer_lst[i + j].identifier_compatible:
-                if lexer_lst[i + j].val == '...':
-                    if variadic:
-                        # TODO: handle error
-                        return token_total_len
-                    else:
-                        variadic = True
+            if not lexer_lst[j].identifier_compatible:
+                if lexer_lst[j].val == '...':
+                    variadic = True
+                    # In a variadic macro, the ellipsis is the last parameter.
+                    j += 1
+                    break
                 else:
                     # TODO: handle error
                     return token_total_len
@@ -216,33 +211,35 @@ def _cpp_directive_handle_define(lexer_lst: list, macros_dict: dict, cond_queue:
                 # TODO: handle error
                 return token_total_len
 
-            macro_parameters.append(lexer_lst[i + j])
+            macro_parameters.append(lexer_lst[j])
             separator_found = False
             j += 1
 
             # Remove spaces
-            while (i + j) < token_total_len and lexer_lst[i + j].val == ' ':
+            while j < token_total_len and lexer_lst[j].val == ' ':
                 j += 1
 
             # Remove separator
-            if lexer_lst[i + j].val == ',':
+            if lexer_lst[j].val == ',':
                 separator_found = True
                 j += 1
 
         # Parameter processing is over, make sure we end on an ')'
-        if function_like and lexer_lst[i + j].val != ')':
+        if function_like and lexer_lst[j].val != ')':
             # TODO: handle error
             return token_total_len
         else:
             j += 1
 
+    # TODO: go over the parameters and check they are all valid (predefined names [VA_ARGS] etc.).
+
     macro_value = []
     # Remove value preceding white spaces
-    while (i + j) < token_total_len and lexer_lst[i + j].val == ' ':
+    while j < token_total_len and lexer_lst[j].val == ' ':
         j += 1
 
-    while (i + j) < token_total_len:
-        macro_value.append(lexer_lst[i + j])
+    while (j) < token_total_len:
+        macro_value.append(lexer_lst[j])
         j += 1
 
     if len(macro_value) == 0:
@@ -510,35 +507,6 @@ def _do_add_predefined_macros(macros_dict: dict):
     pass
 
 
-# TODO: move to a dedicated file
-def _do_macro_sub(lexer_lst: list, i: int, macros_dict: dict):
-    """
-    Perform macro substitution.
-    :param lexer_lst: token list.
-    :param i: current token index.
-    :param macros_dict: defined macros dictionary.
-    :return: macro offset.
-    """
-
-    ### Debug prints ###
-    print(f"doing macro sub: {lexer_lst[i]}")
-
-    sub_macro = macros_dict[lexer_lst[i].val]
-
-    if sub_macro.function_like:
-        if sub_macro.variadic:
-            # A variadic macro
-            pass
-        else:
-            # A simple function-like macro
-            pass
-    else:
-        # A non-function-like macro
-        pass
-
-    return 1
-
-
 def directives_do_process(lexer_lst: list, macros_dict: dict):
     """
     Perform preprocessor directive processing.
@@ -577,9 +545,10 @@ def directives_do_process(lexer_lst: list, macros_dict: dict):
         return
 
     # Remove anything prior to the first macro token
+    j += 1
     while j < tokens_total_len and lexer_lst[j].val == ' ':
         j += 1
-    del lexer_lst[0:j + 1]
+    del lexer_lst[0:j]
 
     # Get the directive handler function
     directive_handler = _cpp_directive_handlers[directive_name]
